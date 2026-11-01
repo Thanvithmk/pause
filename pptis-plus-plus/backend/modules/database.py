@@ -63,11 +63,8 @@ def _database_uri(database_uri=None):
         from config import get_config
 
         return get_config().SQLALCHEMY_DATABASE_URI
-    except ImportError:
-        uri = os.getenv("DATABASE_URL", "sqlite:///pptis.db")
-        if uri.startswith("postgres://"):
-            uri = uri.replace("postgres://", "postgresql://", 1)
-        return uri
+    except ImportError as exc:
+        raise RuntimeError("database: PostgreSQL configuration could not be loaded") from exc
 
 
 def init_db(database_uri=None, create_tables=True):
@@ -96,13 +93,14 @@ def ensure_optional_columns():
         return
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
+    timestamp_type = "TIMESTAMP" if engine.dialect.name == "postgresql" else "DATETIME"
     desired = {
         "messages": {
             "current_text": "TEXT",
             "analyzed_text": "TEXT",
             "send_status": "VARCHAR(32) DEFAULT 'draft'",
-            "sent_at": "DATETIME",
-            "analyzed_at": "DATETIME",
+            "sent_at": timestamp_type,
+            "analyzed_at": timestamp_type,
         },
         "delayed_send_locks": {
             "conversation_id": "INTEGER",

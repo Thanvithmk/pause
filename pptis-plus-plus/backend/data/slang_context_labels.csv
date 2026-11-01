@@ -1,0 +1,149 @@
+split,sentence,target,label
+train,The chicken is fully cooked in the oven.,cooked,literal
+train,I cooked pasta for the family.,cooked,literal
+train,The steak was cooked medium rare.,cooked,literal
+train,Dinner is cooked and ready to serve.,cooked,literal
+train,She cooked soup on the stove.,cooked,literal
+train,These vegetables are cooked until soft.,cooked,literal
+train,He cooked breakfast before school.,cooked,literal
+train,The rice is cooked all the way through.,cooked,literal
+train,A fire started in the kitchen.,fire,literal
+train,The warehouse fire was put out quickly.,fire,literal
+train,The crew contained the fire.,fire,literal
+train,We sat near the fire to stay warm.,fire,literal
+train,The forest fire moved east.,fire,literal
+train,She has been sick with a fever.,sick,literal
+train,The patient is sick and needs rest.,sick,literal
+train,He stayed home because he was sick.,sick,literal
+train,He wore a cap to the baseball game.,cap,literal
+train,The bottle cap fell on the floor.,cap,literal
+train,Tighten the cap before you travel.,cap,literal
+train,The battery is dead after the long drive.,dead,literal
+train,My phone is dead and needs a charger.,dead,literal
+train,The dead leaves covered the yard.,dead,literal
+train,She ate lunch at noon.,ate,literal
+train,We ate dinner together at home.,ate,literal
+train,The birds ate the seeds.,ate,literal
+train,The soup tasted too salty.,salty,literal
+train,This pretzel is salty.,salty,literal
+train,I bet five dollars on the card game.,bet,literal
+train,Place your bet at the window.,bet,literal
+train,Stand at the mid point of the rope.,mid,literal
+train,The mid section of the book is slow.,mid,literal
+train,We packed an extra blanket.,extra,literal
+train,There is an extra chair in the hall.,extra,literal
+train,The hero will slay the dragon.,slay,literal
+train,They slay the beast in the old story.,slay,literal
+train,I wrote the word rizz on the flash card.,rizz,literal
+train,The teacher defined sus on the board.,sus,literal
+train,He pressed the red button twice.,pressed,literal
+train,The clown painted his face for the circus.,clown,literal
+train,She copied the spelling of lowkey into her notebook.,lowkey,literal
+train,Bro you're cooked after that match.,cooked,slang
+train,That boss cooked our whole squad.,cooked,slang
+train,I'm cooked if this bug ships.,cooked,slang
+train,We are cooked once the timer hits zero.,cooked,slang
+train,The quiz cooked him before lunch.,cooked,slang
+train,This outfit is fire ngl.,fire,slang
+train,That performance was fire.,fire,slang
+train,Your jacket is straight fire.,fire,slang
+train,The new track is fire.,fire,slang
+train,His fit is fire tonight.,fire,slang
+train,Those shoes are sick.,sick,slang
+train,That goal was absolutely sick.,sick,slang
+train,Your fit is sick today.,sick,slang
+train,That's cap and you know it.,cap,slang
+train,You are on cap with that story.,cap,slang
+train,I'm dead that joke landed so hard.,dead,slang
+train,That twist has me dead.,dead,slang
+train,She ate that performance.,ate,slang
+train,He ate and left no crumbs on stage.,ate,slang
+train,Don't be salty about the loss.,salty,slang
+train,He's so salty after the final.,salty,slang
+train,Bet I'll be there tonight.,bet,slang
+train,Say less bet.,bet,slang
+train,That album is mid.,mid,slang
+train,The sequel was mid ngl.,mid,slang
+train,You're so extra about the seating.,extra,slang
+train,Why are you being extra?,extra,slang
+train,This look does slay.,slay,slang
+train,She will slay that presentation.,slay,slang
+train,His rizz is unreal.,rizz,slang
+train,That was sus behavior.,sus,slang
+train,Why are you pressed over a comment?,pressed,slang
+train,Don't be a clown about the score.,clown,slang
+train,Lowkey that meeting was rough.,lowkey,slang
+train,Fr that round was a mess.,fr,slang
+train,This burger is bussin.,bussin,slang
+train,You're an npc in this plot.,npc,slang
+train,That comment was cringe.,cringe,slang
+train,He's delulu about the ranking.,delulu,slang
+train,This film is bakwas.,bakwas,slang
+train,Highkey exhausted after practice.,highkey,slang
+train,The garage caught fire overnight.,fire,literal
+train,A candle caught fire on the table.,fire,literal
+train,The curtains caught fire from the lamp.,fire,literal
+train,I cooked dinner for my parents.,cooked,literal
+train,I cooked dinner after work.,cooked,literal
+train,The chicken is cooked through.,cooked,literal
+train,Is the chicken cooked yet?,cooked,literal
+train,Bro you're cooked fr.,cooked,slang
+train,Yeah bro you're cooked.,cooked,slang
+train,You're cooked 💀 from that loss.,cooked,slang
+train,This song is fire.,fire,slang
+train,This whole set is fire.,fire,slang
+train,Your new fit is fire.,fire,slang
+train,That midterm cooked me.,cooked,slang
+train,The interview cooked me.,cooked,slang
+val,The roast is cooked and resting.,cooked,literal
+val,I cooked eggs this morning.,cooked,literal
+val,Fire spread through the old warehouse.,fire,literal
+val,Smoke means a fire is still burning.,fire,literal
+val,She called in sick today.,sick,literal
+val,The spare phone is dead.,dead,literal
+val,They ate cereal before class.,ate,literal
+val,This cracker is salty.,salty,literal
+val,Leave the cap on the pen.,cap,literal
+val,We need one extra napkin.,extra,literal
+val,A literal bet was written on paper.,bet,literal
+val,Mark the mid point with chalk.,mid,literal
+val,Bro we are cooked after that paper.,cooked,slang
+val,The pop quiz cooked me.,cooked,slang
+val,Your jacket tonight is fire.,fire,slang
+val,That combo was sick.,sick,slang
+val,I'm dead from that punchline.,dead,slang
+val,She ate the whole runway.,ate,slang
+val,You're so salty right now.,salty,slang
+val,That rumor is cap.,cap,slang
+val,This season is mid.,mid,slang
+val,He's being extra again.,extra,slang
+val,Bet we leave at eight.,bet,slang
+val,Lowkey this homework cooked me.,cooked,slang
+val,The barn caught fire at night.,fire,literal
+val,I cooked dinner on Sunday.,cooked,literal
+val,This playlist is fire.,fire,slang
+val,Bro you're cooked today.,cooked,slang
+test,The chicken is cooked.,cooked,literal
+test,Bro you're cooked 💀,cooked,slang
+test,I cooked dinner.,cooked,literal
+test,That exam cooked me.,cooked,slang
+test,This fit is fire.,fire,slang
+test,The building caught fire.,fire,literal
+test,The soup is cooked down into a sauce.,cooked,literal
+test,Nah you're cooked in this lobby.,cooked,slang
+test,We cooked rice and beans.,cooked,literal
+test,The final cooked me completely.,cooked,slang
+test,A small fire burned in the grate.,fire,literal
+test,Her speech was fire.,fire,slang
+test,He is sick with the flu.,sick,literal
+test,That header was sick.,sick,slang
+test,The remote battery is dead.,dead,literal
+test,I'm dead that was hilarious.,dead,slang
+test,She ate an apple.,ate,literal
+test,She ate that dance.,ate,slang
+test,Put the cap back on the bottle.,cap,literal
+test,That's cap.,cap,slang
+test,The chips are salty.,salty,literal
+test,He's salty about the score.,salty,slang
+test,Bring an extra plate.,extra,literal
+test,You're being extra.,extra,slang

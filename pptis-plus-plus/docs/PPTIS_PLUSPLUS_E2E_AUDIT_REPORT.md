@@ -1,3 +1,5 @@
+Historical record only. Light mode has been removed. Start the current application with `python app.py`. See README.md.
+
 # PPTIS++ end-to-end application audit
 
 Executed: 1 November 2026. Backend tests: **77 passed** (`PPTIS_LIGHT_MODE=true`). Database under test: SQLite in-memory (`TestingConfig`). Production may use PostgreSQL when `USE_POSTGRES=true`.
@@ -70,7 +72,7 @@ Not executed this run: real microphone → Whisper (light mode), PostgreSQL serv
 
 ```bash
 cd pptis-plus-plus/backend
-PPTIS_LIGHT_MODE=true python app.py
+python app.py
 # POST /api/analyze-voice with an audio file → 400
 # "Speech-to-text is unavailable until Whisper is enabled"
 ```

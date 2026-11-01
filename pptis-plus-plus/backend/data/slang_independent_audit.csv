@@ -1,0 +1,169 @@
+category,sentence,target,label
+contrast,A welding spark started a fire beside the loading gate.,fire,literal
+contrast,The closing set at the college fest was pure fire.,fire,slang
+contrast,Grandmother cooked payasam before the guests sat down.,cooked,literal
+contrast,The night shift left the new interns cooked.,cooked,slang
+contrast,The pediatric note lists the toddler as sick with measles.,sick,literal
+contrast,That last over from the spinner was sick.,sick,slang
+contrast,Keep the camera lens cap inside the padded pouch.,cap,literal
+contrast,His public apology was cap and the room knew it.,cap,slang
+contrast,The roadside garage said the alternator is dead.,dead,literal
+contrast,I am dead after that voice note from the group.,dead,slang
+contrast,She ate the last mango during the long train halt.,ate,literal
+contrast,She ate in the moot court final yesterday.,ate,slang
+contrast,This coastal broth is too salty for a small child.,salty,literal
+contrast,He stayed salty after the captain benched him.,salty,slang
+contrast,He placed a modest bet on the opening toss.,bet,literal
+contrast,Bet I will upload the lab notes after class.,bet,slang
+contrast,Fold the campus map along the mid crease.,mid,literal
+contrast,The director cut of that short film is painfully mid.,mid,slang
+contrast,We bought an extra ticket so my cousin could come.,extra,literal
+contrast,You are being extra about a two line caption.,extra,slang
+contrast,In the mural the hunter will slay a boar at dawn.,slay,literal
+contrast,Her budget lehenga does slay at the sangeet.,slay,slang
+contrast,The glossary card only prints the spelling of rizz.,rizz,literal
+contrast,His rizz vanished the moment the viva started.,rizz,slang
+contrast,The safety poster prints the letters sus in a box.,sus,literal
+contrast,That excuse sounded sus even to the juniors.,sus,slang
+contrast,She pressed the doorbell and waited in the rain.,pressed,literal
+contrast,Do not get pressed over one unseen story.,pressed,slang
+contrast,The birthday clown arrived late to the school hall.,clown,literal
+contrast,You look like a clown after that reply in class.,clown,slang
+contrast,The vocab sheet asks students to copy lowkey once.,lowkey,literal
+contrast,Lowkey the evening lecture saved my week.,lowkey,slang
+contrast,Please say fr only when you mean for real.,fr,literal
+contrast,Fr the last bus left us at the campus gate.,fr,slang
+contrast,The canteen board advertised a bussin special by mistake.,bussin,literal
+contrast,This roadside chaat is honestly bussin.,bussin,slang
+ambiguous,Leave the pan alone until the onions are cooked.,cooked,literal
+ambiguous,The comment section cooked the official trailer.,cooked,slang
+ambiguous,Fire regulations cover the hostel kitchen.,fire,literal
+ambiguous,This rough demo is fire if you skip the bridge.,fire,slang
+ambiguous,Cap the flask before you pack the field bag.,cap,literal
+ambiguous,The forwarded screenshot is cap unless the photo is real.,cap,slang
+ambiguous,I am dead serious about the submission deadline.,dead,literal
+ambiguous,That pun has me dead in the quiet library.,dead,slang
+ambiguous,The broth will taste salty if you add the last pinch.,salty,literal
+ambiguous,The fan club got salty over a delayed episode.,salty,slang
+ambiguous,An extra chair is already outside the seminar room.,extra,literal
+ambiguous,The committee is being extra about name tags.,extra,slang
+ambiguous,The nurse wrote that he is sick with a migraine.,sick,literal
+ambiguous,The bass drop in the auditorium was sick.,sick,slang
+ambiguous,She ate two idlis before the morning lab.,ate,literal
+ambiguous,The defence ate once the questions turned technical.,ate,slang
+sarcasm_humour,Oh wonderful another mid slide deck from the committee.,mid,slang
+sarcasm_humour,Sure that excuse is cap and the smile gave it away.,cap,slang
+sarcasm_humour,Great the group chat is salty before noon again.,salty,slang
+sarcasm_humour,Fantastic we are cooked if this draft is the final one.,cooked,slang
+sarcasm_humour,Love that the talent show closer was somehow fire.,fire,slang
+sarcasm_humour,Hilarious how sus the shared alibi sounds.,sus,slang
+sarcasm_humour,Brilliant you are extra about font size now.,extra,slang
+sarcasm_humour,Wonderful the reply makes you look like a clown.,clown,slang
+sarcasm_humour,Cute how delulu the prediction thread became.,delulu,slang
+sarcasm_humour,Nice the status update was pure cringe.,cringe,slang
+sarcasm_humour,The comic on stage will slay a paper dragon for the children.,slay,literal
+sarcasm_humour,Sure the open mic set does slay if irony counts.,slay,slang
+sarcasm_humour,The joke book literally defines rizz in a footnote.,rizz,literal
+sarcasm_humour,Oh his rizz in the apology video was a comedy sketch.,rizz,slang
+sarcasm_humour,The cartoon clown trips over a hose in the panel.,clown,literal
+sarcasm_humour,I am dead the moment the professor reads that pun.,dead,slang
+multiple_meanings,The fire alarm ended before the fire crew arrived.,fire,literal
+multiple_meanings,The fire drill was fire according to the first years.,fire,slang
+multiple_meanings,I cooked the rice and the review still cooked our plan.,cooked,literal
+multiple_meanings,First the onions cooked then the comments cooked the post.,cooked,slang
+multiple_meanings,Cap the marker and ignore the cap in that rumour.,cap,literal
+multiple_meanings,People called the rumour cap after the second photo.,cap,slang
+multiple_meanings,The phone is dead so the joke cannot leave me dead.,dead,literal
+multiple_meanings,My battery is dead and the punchline still has me dead.,dead,slang
+multiple_meanings,She ate lunch then she ate in the debate round.,ate,literal
+multiple_meanings,After she ate a sandwich the panel said she ate.,ate,slang
+multiple_meanings,Add salt if the soup is salty not if the team is salty.,salty,literal
+multiple_meanings,The gravy is salty and the losers are salty too.,salty,slang
+multiple_meanings,Place a cash bet and do not bet the group chat.,bet,literal
+multiple_meanings,I will bet cash later but bet I reply tonight.,bet,slang
+multiple_meanings,Mark the mid crease then admit the film is mid.,mid,literal
+multiple_meanings,The mid chapter is slow and the film is also mid.,mid,slang
+kannada_english,Macha the fest closer was fire even with cheap lights.,fire,slang
+kannada_english,Macha the stove fire spread to the tea towel.,fire,literal
+kannada_english,Scene illa the internal viva left me cooked.,cooked,slang
+kannada_english,Macha she cooked bisibelebath for the whole floor.,cooked,literal
+kannada_english,Timepass aagtha ide because this serial is bakwas.,bakwas,slang
+kannada_english,Guru that excuse is cap maga.,cap,slang
+kannada_english,Macha your ethnic fit does slay for ethnic day.,slay,slang
+kannada_english,Ayyo macha I am dead after the circuits lab.,dead,slang
+kannada_english,Scene illa the canteen masala puri is bussin today.,bussin,slang
+kannada_english,Macha do not get pressed over a seen receipt.,pressed,slang
+kannada_english,Guru the project review was painfully mid.,mid,slang
+kannada_english,Macha that forwarded voice note is sus.,sus,slang
+kannada_english,Timepass movie anthe and the plot is cringe.,cringe,slang
+kannada_english,Macha lowkey the evening bus saved us.,lowkey,slang
+kannada_english,Scene illa fr the results are only tomorrow.,fr,slang
+kannada_english,The hostel cook cooked sambar before quiet hours.,cooked,literal
+hindi_english,Bhai the trailer is fire but the second half is mid.,fire,slang
+hindi_english,Yaar the kitchen fire started from the gas lighter.,fire,literal
+hindi_english,Bhai this surprise test cooked the whole bench.,cooked,slang
+hindi_english,Mummy cooked rajma before we left for college.,cooked,literal
+hindi_english,Kya bakwas that excuse is pure cap.,cap,slang
+hindi_english,Yaar do not be salty it was a one run match.,salty,slang
+hindi_english,Bhai she ate in the dance rehearsal today.,ate,slang
+hindi_english,Yaar I am dead after that stand up clip.,dead,slang
+hindi_english,Scene kya hai this plan sounds sus.,sus,slang
+hindi_english,Bhai the committee is being extra about ID cards.,extra,slang
+hindi_english,Yaar his rizz in the confession post disappeared.,rizz,slang
+hindi_english,Bhai that status was cringe even for the family group.,cringe,slang
+hindi_english,Arre the sequel is mid yaar.,mid,slang
+hindi_english,Bhai bet I will send the PDF after dinner.,bet,slang
+hindi_english,Yaar the street sandwich is actually bussin.,bussin,slang
+hindi_english,The dhaba cook cooked dal in a huge pot.,cooked,literal
+misspelling,That paper coooked the entire batch before lunch.,coooked,unknown
+misspelling,This stage fit is fyre under the cheap lights.,fyre,unknown
+misspelling,The fan club got saltee over the delayed drop.,saltee,unknown
+misspelling,That header in the final was sikk.,sikk,unknown
+misspelling,He is deluloo about the internship shortlist.,deluloo,unknown
+misspelling,The rumour is caap unless the voice note is real.,caap,unknown
+misspelling,Lowky the night lecture helped.,lowky,unknown
+misspelling,Do not get presed over a story view.,presed,unknown
+misspelling,Her lehenga does slayy at the sangeet.,slayy,unknown
+misspelling,This chaat is busin after the extra chili.,busin,unknown
+misspelling,The reply makes you look like a clowne.,clowne,unknown
+misspelling,The last buss left the campus gate.,buss,unknown
+misspelling,His rizzy vanished once the viva began.,rizzy,unknown
+misspelling,That excuse sounded suss even to the juniors.,suss,unknown
+misspelling,I am dedd after the voice note.,dedd,unknown
+misspelling,The director cut is painfully midd.,midd,unknown
+unknown_slang,Bro is completely glorped after the rehearsal.,glorped,unknown
+unknown_slang,The group chat called the idea zorbled.,zorbled,unknown
+unknown_slang,Nobody could translate quixmo in the caption.,quixmo,unknown
+unknown_slang,Her story said the outfit was flarnish.,flarnish,unknown
+unknown_slang,He tried to snarfle the punchline and failed.,snarfle,unknown
+unknown_slang,The comment section is fully skibidi today.,skibidi,unknown
+unknown_slang,That dance clip made the bench yeetless.,yeetless,unknown
+unknown_slang,They described the vibe as rizzler energy.,rizzler,unknown
+unknown_slang,The meme called the plan blorbo coded.,blorbo,unknown
+unknown_slang,A junior wrote glorpcore under the photo.,glorpcore,unknown
+unknown_slang,The caption just says zonkedout for no reason.,zonkedout,unknown
+unknown_slang,Someone labelled the fit grimble in the chat.,grimble,unknown
+unknown_slang,The voice note ended with a random plorb.,plorb,unknown
+unknown_slang,The thread invented the word squinchy overnight.,squinchy,unknown
+unknown_slang,Do not call the professor a flibbet.,flibbet,unknown
+unknown_slang,The poster used the nonsense word marnicle.,marnicle,unknown
+structure_style,Question for the group is the closer actually fire?,fire,slang
+structure_style,Is the welding fire still burning behind the shed?,fire,literal
+structure_style,"If the draft ships like this, we are cooked.",cooked,slang
+structure_style,"While the rice cooked, we set the plates outside.",cooked,literal
+structure_style,Fragment from the chat: pure fire.,fire,slang
+structure_style,"Long version: after the review, the quiet room, and the missed bus, the launch note still felt mid.",mid,slang
+structure_style,Quoted line was 'that rumour is cap' and then the meeting moved on.,cap,slang
+structure_style,Please confirm whether the alternator is dead before we book a cab.,dead,literal
+structure_style,Not the costume clown. The reply itself was clown behaviour.,clown,slang
+structure_style,She will not slay a boar. She will slay the showcase slot.,slay,slang
+structure_style,Three friends walked in. One whispered sus. Nobody laughed.,sus,slang
+structure_style,Can you stop being extra and just send the file?,extra,slang
+structure_style,Lowkey? The 8 am lecture was the useful one.,lowkey,slang
+structure_style,Bet. Notes after the lab. Nothing else.,bet,slang
+structure_style,The poem's hunter will slay the boar. The chat will not.,slay,literal
+structure_style,Dead battery in the mic. Not me. The battery is dead.,dead,literal
+structure_style,Cap on the lens stays closed. The story is a separate cap.,cap,literal
+structure_style,Salty broth on the stove. Salty fans can wait.,salty,literal
+structure_style,I cooked the dal slowly so it would not catch.,cooked,literal
+structure_style,No cap the hostel wifi dropped at midnight.,cap,slang

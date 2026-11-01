@@ -18,18 +18,35 @@ load_dotenv()
 
 
 def create_app(config_name=None):
+    testing = config_name == "testing" or os.getenv("FLASK_ENV") == "testing"
     app = Flask(__name__)
     app.config.from_object(get_config(config_name))
+    database_uri = app.config["SQLALCHEMY_DATABASE_URI"]
+    if not testing and not str(database_uri).startswith("postgresql://"):
+        raise RuntimeError("database: PostgreSQL is required")
 
     _configure_logging(app)
     _configure_cors(app)
-    init_db(app.config["SQLALCHEMY_DATABASE_URI"])
+    init_db(database_uri)
+
+    if _should_verify_models(app):
+        from modules.startup_models import verify_primary_models
+
+        app.extensions["primary_models"] = verify_primary_models()
 
     register_blueprints(app)
     register_error_handlers(app)
     register_request_logging(app)
 
     return app
+
+
+def _should_verify_models(app):
+    if app.config.get("TESTING") or app.config.get("ENV") == "testing":
+        return False
+    if app.debug and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return False
+    return True
 
 
 def _configure_logging(app):

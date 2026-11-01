@@ -42,11 +42,9 @@ Whisper/BERT weights are large. Prefer a persistent volume for Hugging Face cach
 
 ## Database migration
 
-```bash
-# SQLite demo
-python database/migrate.py --skip-tests
+PostgreSQL is the only supported database.
 
-# PostgreSQL
+```bash
 export DATABASE_URL=postgresql://pptis:SECRET@db:5432/pptis
 python database/migrate.py --postgres --skip-tests
 ```
@@ -95,7 +93,7 @@ Trained logistic params persist in `backend/escalation_logistic.json`. Back that
 
 - **API:** gunicorn with 2–4 sync workers per CPU for I/O routes. Model inference is heavy; keep a small worker count or a dedicated inference process.
 - **Models:** load Whisper, Toxic-BERT, and XLM-R once per process. Avoid forking after CUDA init.
-- **DB:** Postgres with connection pooling (PgBouncer) if worker count grows. SQLite is single-writer; do not use it for multi-instance production.
+- **DB:** Postgres with connection pooling (PgBouncer) if worker count grows. The application does not start on SQLite.
 - **Jobs:** delayed-send expiry is computed on read; no background worker is required.
 - **Frontend:** static files scale independently of the API.
 - **Fixed constants:** do not tune `λ` or `α` per instance; they must stay identical everywhere. Only `b`, `w_E`, `w_P` change after RIL retraining.

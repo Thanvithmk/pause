@@ -3,7 +3,7 @@ import os
 import tempfile
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 from sqlalchemy import func
 
 from modules.auth import AuthError, login_user, register_user, require_auth
@@ -19,7 +19,10 @@ from modules.database import (
     get_session,
     utcnow,
 )
+from modules.rewrite_engine import RewriteServiceError
 from modules.send_gateway import SendError, send_analyzed_message
+from modules.slang_layer import SlangModelError
+from modules.speech_to_text import VoiceModelError
 from modules.toxicity_model import ToxicityAnalysisError
 
 logger = logging.getLogger(__name__)
@@ -27,6 +30,18 @@ logger = logging.getLogger(__name__)
 api_bp = Blueprint("api", __name__)
 
 CEL_LABELS = ("toxic", "threat", "insult", "severe_toxic", "obscene", "identity_hate")
+
+
+def _baseline_view(profile):
+    source = profile if isinstance(profile, dict) else {}
+    view = {}
+    for label in CEL_LABELS:
+        raw = source.get(label, source.get(f"avg_{label}", 0.0))
+        try:
+            view[label] = float(raw or 0.0)
+        except (TypeError, ValueError):
+            view[label] = 0.0
+    return view
 
 
 class ApiError(Exception):
@@ -50,7 +65,7 @@ class PipelineServices:
                 logger.info("Loaded pipeline service %s", name)
             except Exception as exc:
                 logger.exception("Failed to load service %s: %s", name, exc)
-                self._cache[name] = None
+                raise
         return self._cache[name]
 
     @property
@@ -159,6 +174,22 @@ def handle_send_error(error):
     return jsonify({"error": "send_error", "message": error.message}), error.status_code
 
 
+@api_bp.route("/health", methods=["GET"])
+def health():
+    report = current_app.extensions.get("primary_models")
+    if not report:
+        return jsonify({"ready": False, "production_ready": False, "error": "primary models were not verified"}), 503
+    local_ready = all(
+        (report.get(name) or {}).get("inference") == "actual"
+        for name in ("slang", "toxicity", "voice")
+    )
+    return jsonify({
+        "ready": local_ready,
+        "production_ready": bool(local_ready and report.get("production_ready")),
+        **report,
+    }), 200 if local_ready else 503
+
+
 @api_bp.route("/analyze", methods=["POST"])
 @require_auth
 def analyze():
@@ -180,8 +211,8 @@ def analyze():
             conversation_id=body.get("conversation_id"),
             transcription_confidence=body.get("transcription_confidence"),
         )
-    except ToxicityAnalysisError as exc:
-        raise ApiError(str(exc) or "Toxicity analysis failed", 503) from exc
+    except (ToxicityAnalysisError, SlangModelError, RewriteServiceError, VoiceModelError) as exc:
+        raise ApiError(str(exc) or "Analysis failed", 503) from exc
     return jsonify(payload), 200
 
 
@@ -204,7 +235,10 @@ def analyze_voice():
         audio.save(handle.name)
         handle.close()
         logger.info("Transcribing voice user_id=%s file=%s", g.current_user_id, audio.filename)
-        result = transcriber.transcribe_audio_file(handle.name, language="en")
+        try:
+            result = transcriber.transcribe_audio_file(handle.name, language="en")
+        except VoiceModelError as exc:
+            raise ApiError(str(exc), 503) from exc
     finally:
         try:
             os.unlink(handle.name)
@@ -226,8 +260,8 @@ def analyze_voice():
             transcription_confidence=result.get("transcription_confidence", 1.0),
             transcription=result,
         )
-    except ToxicityAnalysisError as exc:
-        raise ApiError(str(exc) or "Toxicity analysis failed", 503) from exc
+    except (ToxicityAnalysisError, SlangModelError, RewriteServiceError, VoiceModelError) as exc:
+        raise ApiError(str(exc) or "Analysis failed", 503) from exc
     payload["transcription"] = result
     payload["transcription_confidence"] = payload.get("transcription_confidence")
     return jsonify(payload), 200
@@ -649,13 +683,18 @@ def run_analysis_pipeline(
     )
     rewrite_payload = None
     delay_payload = None
-    if decision["decision"] == "REWRITE" and services.rewriter:
-        rewrite_payload = services.rewriter.rewrite(
+    if decision["decision"] == "REWRITE":
+        rewriter = services.rewriter
+        if rewriter is None:
+            raise ApiError("rewrite: Groq rewrite service is unavailable", 503)
+        rewrite_payload = rewriter.rewrite(
             text,
             conversation_id=conversation.conversation_id,
             message_id=message_id,
             user_id=user_id,
         )
+        if rewrite_payload.get("inference") != "actual" or rewrite_payload.get("model") != "llama-3.1-8b-instant":
+            raise ApiError("rewrite: Groq rewrite did not use llama-3.1-8b-instant", 503)
         action["suggested_text"] = rewrite_payload.get("suggested_text")
         action["allow_send_original"] = False
     if decision["decision"] == "DELAYED-SEND" and services.delayed:
@@ -700,10 +739,12 @@ def run_analysis_pipeline(
         "input_type": input_type,
         "transcription_confidence": transcription_confidence,
         "preprocessed": preprocessed,
-        "slang": slang_result,
+        "slang": slang_result.get("detections") or [],
         "toxicity": toxicity_scores,
+        "behavioral_baseline": _baseline_view(profile),
         "profile": profile,
         "pacl": pacl,
+        "delta_vector": delta,
         "delta_vector_6d": delta,
         "escalation_feature": cel,
         "escalation_probability": p_esc,
@@ -724,6 +765,12 @@ def run_analysis_pipeline(
             "suggested_text"
         ),
         "warning_message": action.get("warning_message"),
+        "analysis_complete": True,
+        "inference": {
+            "slang": "actual",
+            "toxicity": "actual",
+            "rewrite": (rewrite_payload or {}).get("inference"),
+        },
     }
 
 

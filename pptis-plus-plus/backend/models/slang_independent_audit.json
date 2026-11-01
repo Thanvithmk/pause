@@ -1,0 +1,385 @@
+{
+  "encoder_name": "xlm-roberta-base",
+  "checkpoint": "slang_literal_head.pt",
+  "threshold": 0.58,
+  "trained_on_this_file": false,
+  "threshold_refit": false,
+  "audit_rows": 168,
+  "classified_rows": 136,
+  "unknown_rows": 32,
+  "unknown_detected": 29,
+  "unknown_detection_rate": 0.90625,
+  "primary": {
+    "source": "xlm-roberta-classifier",
+    "overall": {
+      "confusion_matrix": {
+        "rows_are": "actual",
+        "columns_are": [
+          "literal",
+          "slang",
+          "uncertain",
+          "unclassified"
+        ],
+        "labels": [
+          "literal",
+          "slang"
+        ],
+        "values": [
+          [
+            42,
+            3,
+            6,
+            0
+          ],
+          [
+            12,
+            65,
+            8,
+            0
+          ]
+        ]
+      },
+      "literal": {
+        "precision": 0.7777777777777778,
+        "recall": 0.8235294117647058,
+        "f1": 0.7999999999999999,
+        "support": 51
+      },
+      "slang": {
+        "precision": 0.9558823529411765,
+        "recall": 0.7647058823529411,
+        "f1": 0.849673202614379,
+        "support": 85
+      },
+      "macro_f1": 0.8248366013071895,
+      "accuracy": 0.7867647058823529,
+      "confident_accuracy": 0.8770491803278688,
+      "uncertain_rate": 0.10294117647058823,
+      "count": 136
+    },
+    "by_category": {
+      "ambiguous": {
+        "confusion_matrix": {
+          "rows_are": "actual",
+          "columns_are": [
+            "literal",
+            "slang",
+            "uncertain",
+            "unclassified"
+          ],
+          "labels": [
+            "literal",
+            "slang"
+          ],
+          "values": [
+            [
+              6,
+              1,
+              1,
+              0
+            ],
+            [
+              0,
+              7,
+              1,
+              0
+            ]
+          ]
+        },
+        "literal": {
+          "precision": 1.0,
+          "recall": 0.75,
+          "f1": 0.8571428571428571,
+          "support": 8
+        },
+        "slang": {
+          "precision": 0.875,
+          "recall": 0.875,
+          "f1": 0.875,
+          "support": 8
+        },
+        "macro_f1": 0.8660714285714286,
+        "accuracy": 0.8125,
+        "confident_accuracy": 0.9285714285714286,
+        "uncertain_rate": 0.125,
+        "count": 16
+      },
+      "contrast": {
+        "confusion_matrix": {
+          "rows_are": "actual",
+          "columns_are": [
+            "literal",
+            "slang",
+            "uncertain",
+            "unclassified"
+          ],
+          "labels": [
+            "literal",
+            "slang"
+          ],
+          "values": [
+            [
+              14,
+              2,
+              2,
+              0
+            ],
+            [
+              1,
+              15,
+              2,
+              0
+            ]
+          ]
+        },
+        "literal": {
+          "precision": 0.9333333333333333,
+          "recall": 0.7777777777777778,
+          "f1": 0.8484848484848485,
+          "support": 18
+        },
+        "slang": {
+          "precision": 0.8823529411764706,
+          "recall": 0.8333333333333334,
+          "f1": 0.8571428571428571,
+          "support": 18
+        },
+        "macro_f1": 0.8528138528138528,
+        "accuracy": 0.8055555555555556,
+        "confident_accuracy": 0.90625,
+        "uncertain_rate": 0.1111111111111111,
+        "count": 36
+      },
+      "hindi_english": {
+        "confusion_matrix": {
+          "rows_are": "actual",
+          "columns_are": [
+            "literal",
+            "slang",
+            "uncertain",
+            "unclassified"
+          ],
+          "labels": [
+            "literal",
+            "slang"
+          ],
+          "values": [
+            [
+              2,
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              13,
+              0,
+              0
+            ]
+          ]
+        },
+        "literal": {
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "f1": 0.8,
+          "support": 3
+        },
+        "slang": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 13
+        },
+        "macro_f1": 0.9,
+        "accuracy": 0.9375,
+        "confident_accuracy": 1.0,
+        "uncertain_rate": 0.0625,
+        "count": 16
+      },
+      "kannada_english": {
+        "confusion_matrix": {
+          "rows_are": "actual",
+          "columns_are": [
+            "literal",
+            "slang",
+            "uncertain",
+            "unclassified"
+          ],
+          "labels": [
+            "literal",
+            "slang"
+          ],
+          "values": [
+            [
+              3,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              12,
+              1,
+              0
+            ]
+          ]
+        },
+        "literal": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 3
+        },
+        "slang": {
+          "precision": 1.0,
+          "recall": 0.9230769230769231,
+          "f1": 0.9600000000000001,
+          "support": 13
+        },
+        "macro_f1": 0.98,
+        "accuracy": 0.9375,
+        "confident_accuracy": 1.0,
+        "uncertain_rate": 0.0625,
+        "count": 16
+      },
+      "multiple_meanings": {
+        "confusion_matrix": {
+          "rows_are": "actual",
+          "columns_are": [
+            "literal",
+            "slang",
+            "uncertain",
+            "unclassified"
+          ],
+          "labels": [
+            "literal",
+            "slang"
+          ],
+          "values": [
+            [
+              7,
+              0,
+              1,
+              0
+            ],
+            [
+              8,
+              0,
+              0,
+              0
+            ]
+          ]
+        },
+        "literal": {
+          "precision": 0.4666666666666667,
+          "recall": 0.875,
+          "f1": 0.608695652173913,
+          "support": 8
+        },
+        "slang": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 8
+        },
+        "macro_f1": 0.3043478260869565,
+        "accuracy": 0.4375,
+        "confident_accuracy": 0.4666666666666667,
+        "uncertain_rate": 0.0625,
+        "count": 16
+      },
+      "sarcasm_humour": {
+        "confusion_matrix": {
+          "rows_are": "actual",
+          "columns_are": [
+            "literal",
+            "slang",
+            "uncertain",
+            "unclassified"
+          ],
+          "labels": [
+            "literal",
+            "slang"
+          ],
+          "values": [
+            [
+              2,
+              0,
+              1,
+              0
+            ],
+            [
+              1,
+              10,
+              2,
+              0
+            ]
+          ]
+        },
+        "literal": {
+          "precision": 0.6666666666666666,
+          "recall": 0.6666666666666666,
+          "f1": 0.6666666666666666,
+          "support": 3
+        },
+        "slang": {
+          "precision": 1.0,
+          "recall": 0.7692307692307693,
+          "f1": 0.8695652173913044,
+          "support": 13
+        },
+        "macro_f1": 0.7681159420289856,
+        "accuracy": 0.75,
+        "confident_accuracy": 0.9230769230769231,
+        "uncertain_rate": 0.1875,
+        "count": 16
+      },
+      "structure_style": {
+        "confusion_matrix": {
+          "rows_are": "actual",
+          "columns_are": [
+            "literal",
+            "slang",
+            "uncertain",
+            "unclassified"
+          ],
+          "labels": [
+            "literal",
+            "slang"
+          ],
+          "values": [
+            [
+              8,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              8,
+              2,
+              0
+            ]
+          ]
+        },
+        "literal": {
+          "precision": 0.8,
+          "recall": 1.0,
+          "f1": 0.888888888888889,
+          "support": 8
+        },
+        "slang": {
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "f1": 0.8,
+          "support": 12
+        },
+        "macro_f1": 0.8444444444444446,
+        "accuracy": 0.8,
+        "confident_accuracy": 0.8888888888888888,
+        "uncertain_rate": 0.1,
+        "count": 20
+      }
+    }
+  }
+}

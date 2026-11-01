@@ -2,11 +2,15 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-os.environ.setdefault("PPTIS_LIGHT_MODE", "true")
 os.environ["FLASK_ENV"] = "testing"
+
+# Slang and toxicity calls in this file use the loaded models.
+# Groq completions are mocked so a remote API error cannot be stored as a rewrite.
+REWRITE_INFERENCE = "mocked"
 
 from api.routes import services
 from app import create_app
@@ -39,9 +43,13 @@ class EndToEndApplicationTests(unittest.TestCase):
         payload = {"text": text}
         if conversation_id:
             payload["conversation_id"] = conversation_id
-        response = self.client.post(
-            "/api/analyze", json=payload, headers=headers or self.headers_a
-        )
+        with patch(
+            "modules.rewrite_engine.RewriteEngine._complete_groq",
+            return_value="I want to discuss this more calmly.",
+        ):
+            response = self.client.post(
+                "/api/analyze", json=payload, headers=headers or self.headers_a
+            )
         return response.status_code, response.get_json()
 
     def _send(self, analysis, text=None, user_action="send", headers=None):
@@ -89,12 +97,19 @@ class EndToEndApplicationTests(unittest.TestCase):
         self.assertEqual(messages[-1]["message"]["send_status"], "sent")
 
     def test_warn_rewrite_delayed_and_edit(self):
-        _, analysis = self._analyze("This deadline feels unrealistic given the remaining work.")
-        self.assertEqual(analysis["decision"], "WARN")
-        blocked, body = self._send(analysis)
-        self.assertEqual(blocked, 409, body)
-        allowed, sent = self._send(analysis, user_action="send_anyway")
-        self.assertEqual(allowed, 200, sent)
+        self.assertEqual(REWRITE_INFERENCE, "mocked")
+        status, analysis = self._analyze("This deadline feels unrealistic given the remaining work.")
+        self.assertEqual(status, 200, analysis)
+        self.assertTrue(analysis["analysis_complete"])
+        self.assertEqual(analysis["inference"]["toxicity"], "actual")
+        self.assertEqual(analysis["decision"], _band(analysis["final_risk"]))
+        if analysis["decision"] == "WARN":
+            blocked, body = self._send(analysis)
+            self.assertEqual(blocked, 409, body)
+            allowed, sent = self._send(analysis, user_action="send_anyway")
+            self.assertEqual(allowed, 200, sent)
+        elif analysis["decision"] == "ALLOW":
+            self.assertEqual(self._send(analysis)[0], 200)
 
         session = get_session()
         feedback = session.query(Feedback).filter(Feedback.message_id == analysis["message_id"]).first()
@@ -117,7 +132,18 @@ class EndToEndApplicationTests(unittest.TestCase):
     def test_slang_is_not_toxicity_by_itself(self):
         _, analysis = self._analyze("Bro, that movie was fire")
         self.assertEqual(analysis["decision"], "ALLOW")
-        self.assertTrue(analysis.get("slang"))
+        self.assertEqual(analysis["original_text"], "Bro, that movie was fire")
+        self.assertEqual(analysis["slang"][0]["term"].lower(), "fire")
+        self.assertEqual(analysis["slang"][0]["usage"], "slang")
+        self.assertTrue(analysis["slang"][0]["meaning"])
+        self.assertEqual(set(analysis["behavioral_baseline"]), {
+            "toxic", "threat", "insult", "severe_toxic", "obscene", "identity_hate",
+        })
+        self.assertEqual(len(analysis["delta_vector"]), 6)
+        self.assertIn("escalation_feature", analysis)
+        self.assertIn("escalation_probability", analysis)
+        self.assertIn("pacl", analysis)
+        self.assertIn("final_risk", analysis)
 
     def test_cross_user_conversation_and_delayed_status(self):
         _, analysis = self._analyze("I will hurt you after class.")
@@ -160,6 +186,83 @@ class EndToEndApplicationTests(unittest.TestCase):
         response = self.client.post("/api/analyze-voice", headers=self.headers_a)
         self.assertEqual(response.status_code, 400)
 
+    def test_single_conversation_demonstration(self):
+        created = self.client.post("/api/conversations", headers=self.headers_a)
+        self.assertEqual(created.status_code, 201, created.get_json())
+        conversation_id = created.get_json()["conversation"]["conversation_id"]
+
+        status, first = self._analyze("I don't agree with this.", conversation_id)
+        self.assertEqual(status, 200, first)
+        self.assertEqual(first["decision"], "ALLOW")
+        self.assertLess(first["toxicity"]["toxic"], 0.30)
+        self.assertLess(first["pacl"], 0.30)
+        self.assertLess(first["escalation_feature"], 0.30)
+        self.assertLess(first["final_risk"], 0.30)
+        self.assertEqual(len(first["delta_vector"]), 6)
+        self.assertEqual(set(first["behavioral_baseline"]), {
+            "toxic", "threat", "insult", "severe_toxic", "obscene", "identity_hate",
+        })
+        sent_status, sent = self._send(first)
+        self.assertEqual(sent_status, 200, sent)
+
+        status, second = self._analyze("Bro you're cooked 💀", conversation_id)
+        self.assertEqual(status, 200, second)
+        cooked = next(item for item in second["slang"] if item["term"].lower() == "cooked")
+        self.assertEqual(cooked["usage"], "slang")
+        self.assertIsInstance(cooked["confidence"], float)
+        self.assertGreater(cooked["confidence"], 0.5)
+        self.assertIn("trouble", cooked["meaning"])
+        self.assertTrue(second["enriched_text"].startswith("Bro you're cooked 💀"))
+        self.assertIn("[Contextual meaning:", second["enriched_text"])
+        self.assertNotIn("Bro you're defeated", second["enriched_text"])
+        self.assertEqual(second["decision"], _band(second["final_risk"]))
+        if second["decision"] == "ALLOW":
+            self.assertEqual(self._send(second)[0], 200)
+
+        status, third = self._analyze("You're completely useless.", conversation_id)
+        self.assertEqual(status, 200, third)
+        self.assertGreater(third["toxicity"]["toxic"], second["toxicity"]["toxic"])
+        self.assertGreater(third["pacl"], second["pacl"])
+        self.assertGreater(third["escalation_feature"], 0)
+        self.assertGreater(third["escalation_feature"], second["escalation_feature"])
+        self.assertGreater(third["final_risk"], second["final_risk"])
+        self.assertIn(third["decision"], ("REWRITE", "DELAYED-SEND"))
+        self.assertEqual(third["decision"], _band(third["final_risk"]))
+        blocked, blocked_body = self._send(third)
+        self.assertEqual(blocked, 403, blocked_body)
+
+        if third["decision"] != "DELAYED-SEND":
+            return
+        self.assertFalse(third["allow_send_anyway"])
+        self.assertGreaterEqual(len(third["delayed_send"]["exercises"]), 1)
+
+        from datetime import timedelta
+
+        from modules.database import utcnow
+        from modules.delayed_send import DelayedSendLock
+
+        session = get_session()
+        lock = session.query(DelayedSendLock).filter_by(message_id=third["message_id"]).one()
+        lock.expires_at = utcnow() - timedelta(seconds=2)
+        session.commit()
+        close_session()
+
+        still_blocked, still_body = self._send(third)
+        self.assertEqual(still_blocked, 403, still_body)
+
+        status, calm = self._analyze("I don't agree with this.", conversation_id)
+        self.assertEqual(status, 200, calm)
+        self.assertEqual(calm["decision"], "ALLOW")
+        ok, sent_body = self._send(calm)
+        self.assertEqual(ok, 200, sent_body)
+
+        session = get_session()
+        feedback = session.query(Feedback).filter(Feedback.message_id == third["message_id"]).one()
+        close_session()
+        self.assertEqual(feedback.intervention, "DELAYED-SEND")
+        self.assertEqual(feedback.user_response, "edited")
+        self.assertEqual(feedback.outcome, "positive")
+
     def test_invalid_message_id_send(self):
         response = self.client.post(
             "/api/send",
@@ -167,6 +270,16 @@ class EndToEndApplicationTests(unittest.TestCase):
             headers=self.headers_a,
         )
         self.assertIn(response.status_code, (403, 404, 422))
+
+
+def _band(score):
+    if score < 0.30:
+        return "ALLOW"
+    if score < 0.55:
+        return "WARN"
+    if score < 0.80:
+        return "REWRITE"
+    return "DELAYED-SEND"
 
 
 if __name__ == "__main__":

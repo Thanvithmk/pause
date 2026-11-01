@@ -18,19 +18,10 @@ Optional voice/GPU packages: `faster-whisper` needs FFmpeg on the host.
 
 ## Database setup
 
-**SQLite (default)**
-
-```bash
-cd ../database
-python migrate.py
-```
-
-This creates `database/pptis.db` from SQLAlchemy models, loads `slang_dictionary.csv`, seeds a demo user, and runs tests.
-
-**PostgreSQL**
+PostgreSQL is required. The application refuses to start when the database URI is not `postgresql://`.
 
 1. Create a database named `pptis`.
-2. Set `USE_POSTGRES=true` or `DATABASE_URL=postgresql://user:pass@host:5432/pptis`.
+2. Set `DATABASE_URL=postgresql://user:pass@host:5432/pptis`.
 3. Apply schema and slang:
 
 ```bash
@@ -51,11 +42,11 @@ Copy `backend/.env.example` to `backend/.env` and edit values.
 | `FLASK_ENV` | `development` / `production` | `production` |
 | `SECRET_KEY` | Flask sessions | `change-me` |
 | `JWT_SECRET_KEY` | JWT signing | `change-me-jwt` |
-| `DATABASE_URL` | Full DB URI | SQLite file |
-| `USE_POSTGRES` | Build URI from `POSTGRES_*` | `false` |
+| `DATABASE_URL` | PostgreSQL URI | required |
 | `CORS_ORIGINS` | Allowed frontend origins | `http://localhost:3000` |
-| `WHISPER_MODEL` | Faster-Whisper model | `base.en` |
-| `GROQ_API_KEY` | Rewrite LLM | unset (templates) |
+| `WHISPER_MODEL` | Faster-Whisper model | `base.en` only |
+| `GROQ_API_KEY` | Groq rewrite key | required |
+| `GROQ_MODEL` | Groq model | `llama-3.1-8b-instant` only |
 | `LOGISTIC_B`, `LOGISTIC_W_E`, `LOGISTIC_W_P` | Trained `P_esc` weights | `0`, `1`, `1` |
 
 Fixed (not env-tuned): `PACL_LAMBDA = 0.5`, `FINAL_RISK_ALPHA = 0.5`, decision thresholds `0.30 / 0.55 / 0.80`.
@@ -68,7 +59,7 @@ export FLASK_ENV=development
 python app.py
 ```
 
-Listens on `0.0.0.0:5000` by default (`HOST`, `PORT`). First analyze request may download Whisper/BERT/XLM-R models.
+Listens on `0.0.0.0:5000` by default (`HOST`, `PORT`). Startup loads `xlm-roberta-base`, `backend/models/slang_literal_head.pt` (threshold 0.58), `unitary/toxic-bert`, and Whisper `base.en`. If one of those cannot load, the process exits. Groq is checked for a configured key and the model name `llama-3.1-8b-instant`. A failed Groq call returns an error and does not invent a rewrite.
 
 ## API endpoints
 
@@ -139,7 +130,10 @@ Password rules: 8+ characters, one uppercase letter, one digit, one special char
 
 ## Tests
 
+The default suite uses the real slang, toxicity, and Whisper checkpoints. Groq completions inside the end-to-end tests are mocked. The live Groq call is separate:
+
 ```bash
 cd backend
 PYTHONPATH=. python -m unittest discover -s tests -p 'test_*.py' -v
+PYTHONPATH=. python checks/groq_live_check.py
 ```

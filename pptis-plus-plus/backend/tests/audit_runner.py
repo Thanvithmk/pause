@@ -2,8 +2,6 @@ import os
 from collections import Counter
 from unittest.mock import patch
 
-os.environ.setdefault("PPTIS_LIGHT_MODE", "true")
-
 from modules.decision_engine import DecisionEngine
 from modules.risk_calculation import RiskCalculator
 from modules.toxicity_model import ToxicityAnalyzer

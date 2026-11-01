@@ -4,8 +4,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["IBM Plex Sans", "ui-sans-serif", "system-ui"],
-        mono: ["IBM Plex Mono", "ui-monospace", "monospace"],
+        sans: ["Plus Jakarta Sans", "ui-sans-serif", "system-ui"],
+        mono: ["ui-monospace", "monospace"],
       },
       colors: {
         ink: "#12151c",

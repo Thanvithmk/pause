@@ -2,7 +2,9 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 
+from dotenv import dotenv_values
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, JSON, Text
 
 from modules.database import (
@@ -19,16 +21,12 @@ from modules.risk_calculation import RiskCalculator
 
 logger = logging.getLogger(__name__)
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-LOCAL_LLM_URL = os.getenv("LOCAL_LLM_URL")
-LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "llama3")
-MAX_REWRITE_ATTEMPTS = 2
-
-REWRITE_TEMPLATES = (
-    "I want to be honest, but more calmly: {softened}",
-    "I'm frustrated about this and I'd rather say it this way: {softened}",
-    "Can we talk about this? Here's what I mean without the heat: {softened}",
+REQUIRED_GROQ_MODEL = "llama-3.1-8b-instant"
+_ENV_FILES = (
+    Path(__file__).resolve().parents[2] / ".env",
+    Path(__file__).resolve().parents[1] / ".env",
 )
+MAX_REWRITE_ATTEMPTS = 2
 
 STRICT_SYSTEM_PROMPT = (
     "Rewrite the user's message so it is safer and less toxic while keeping the same intent. "
@@ -36,22 +34,8 @@ STRICT_SYSTEM_PROMPT = (
     "Never tell the user to send the original message."
 )
 
-HARSH_WORDS = (
-    "stupid",
-    "idiot",
-    "hate",
-    "kill",
-    "dumb",
-    "shut up",
-    "worthless",
-    "pathetic",
-    "loser",
-    "moron",
-    "disgusting",
-    "incompetent",
-    "clown",
-    "hopeless",
-)
+class RewriteServiceError(RuntimeError):
+    """Groq rewrite failed. No substitute sentence is returned."""
 
 
 class RewriteContext(CRUDMixin, Base):
@@ -68,10 +52,23 @@ class RewriteContext(CRUDMixin, Base):
     timestamp = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
 
+def _setting(name):
+    for path in _ENV_FILES:
+        if not path.is_file():
+            continue
+        value = dotenv_values(path).get(name)
+        if value is not None and str(value).strip():
+            return str(value).strip().strip('"').strip("'")
+    return (os.getenv(name) or "").strip().strip('"').strip("'")
+
+
 class RewriteEngine:
     def __init__(self):
-        self.groq_client = self._init_groq()
-        self.templates = list(REWRITE_TEMPLATES)
+        self.groq_client = None
+        self._groq_key = None
+        self.groq_model = REQUIRED_GROQ_MODEL
+        self.inference = "actual"
+        self._ensure_groq()
         self.toxicity_analyzer = self._init_toxicity_analyzer()
         self.risk_calculator = RiskCalculator()
         try:
@@ -79,10 +76,8 @@ class RewriteEngine:
         except Exception as exc:
             logger.warning("Could not ensure rewrite_context table: %s", exc)
         logger.info(
-            "RewriteEngine ready groq=%s templates=%s toxicity=%s",
-            self.groq_client is not None,
-            len(self.templates),
-            self.toxicity_analyzer is not None,
+            "RewriteEngine ready model=%s device_note=remote",
+            self.groq_model,
         )
 
     def rewrite(self, original_text, conversation_id=None, message_id=None, user_id=None):
@@ -131,6 +126,8 @@ class RewriteEngine:
             "context_ids": context_ids,
             "validation": validation,
             "suggestion_analysis": suggestion_analysis,
+            "inference": self.inference,
+            "model": self.groq_model,
         }
 
     def get_conversation_context(self, conversation_id, message_id, num_previous=5):
@@ -145,12 +142,9 @@ class RewriteEngine:
                 .one_or_none()
             )
             if current is None:
-                logger.warning(
-                    "Context skipped; message_id=%s not in conversation_id=%s",
-                    message_id,
-                    conversation_id,
+                raise RewriteServiceError(
+                    "rewrite: current message was not found in this conversation"
                 )
-                return []
 
             rows = (
                 session.query(Message)
@@ -181,9 +175,11 @@ class RewriteEngine:
                 message_id,
             )
             return context
-        except Exception:
+        except RewriteServiceError:
+            raise
+        except Exception as exc:
             logger.exception("Failed to load conversation context")
-            return []
+            raise RewriteServiceError("rewrite: conversation context could not be loaded") from exc
         finally:
             close_session()
 
@@ -206,15 +202,20 @@ class RewriteEngine:
 
     def generate_candidate_rewrite(self, original_text, context_messages):
         prompt = self.generate_rewrite_prompt(original_text, context_messages)
-        try:
-            suggested = self._complete(prompt)
-            if suggested:
-                logger.info("Generated rewrite via LLM chars=%s", len(suggested))
-                return suggested
-        except Exception as exc:
-            logger.exception("LLM rewrite failed, using template: %s", exc)
-        suggested = self._template_rewrite(original_text)
-        logger.info("Generated template rewrite")
+        suggested = self._complete(prompt)
+        if suggested and not self._repeats_original(original_text, suggested):
+            logger.info("Generated rewrite via Groq chars=%s model=%s", len(suggested), self.groq_model)
+            return suggested
+        retry = (
+            STRICT_SYSTEM_PROMPT
+            + "\n\n"
+            + prompt
+            + "\nDo not copy the original wording."
+        )
+        suggested = self._complete(retry)
+        if not suggested or self._repeats_original(original_text, suggested):
+            raise RewriteServiceError("rewrite: Groq did not return a distinct rewrite")
+        logger.info("Generated rewrite via Groq chars=%s model=%s", len(suggested), self.groq_model)
         return suggested
 
     def validate_rewrite(self, suggested_text, original_toxicity_scores):
@@ -290,10 +291,9 @@ class RewriteEngine:
                 + self.generate_rewrite_prompt(original_text, context_messages)
                 + "\nThe previous rewrite was still too risky. Make it milder."
             )
-            try:
-                candidate = self._complete(prompt) or self._template_rewrite(original_text)
-            except Exception:
-                candidate = self._template_rewrite(original_text)
+            candidate = self._complete(prompt)
+            if not candidate or self._repeats_original(original_text, candidate):
+                continue
             validation = self.validate_rewrite(candidate, original_scores)
             if validation["is_safer"]:
                 return {
@@ -319,18 +319,15 @@ class RewriteEngine:
         }
 
     def _complete(self, prompt):
-        if self.groq_client is not None:
-            return self._complete_groq(prompt)
-        if LOCAL_LLM_URL:
-            return self._complete_local(prompt)
-        return None
+        self._ensure_groq()
+        return self._complete_groq(prompt)
 
     def _complete_groq(self, prompt):
         last_error = None
         for attempt in range(2):
             try:
                 response = self.groq_client.chat.completions.create(
-                    model=GROQ_MODEL,
+                    model=self.groq_model,
                     messages=[
                         {"role": "system", "content": STRICT_SYSTEM_PROMPT},
                         {"role": "user", "content": prompt},
@@ -340,77 +337,29 @@ class RewriteEngine:
                 )
                 text = (response.choices[0].message.content or "").strip()
                 return text or None
+            except RewriteServiceError:
+                raise
             except Exception as exc:
                 last_error = exc
                 message = str(exc).lower()
                 if "429" in message or "rate" in message:
-                    logger.warning("Groq free-tier rate limit; retrying")
+                    logger.warning("Groq rate limit; retrying")
                     time.sleep(1.5 * (attempt + 1))
                     continue
                 logger.exception("Groq request failed")
                 break
-        if last_error:
-            raise last_error
-        return None
-
-    def _complete_local(self, prompt):
-        import json
-        from urllib import request
-
-        payload = json.dumps(
-            {
-                "model": LOCAL_LLM_MODEL,
-                "messages": [
-                    {"role": "system", "content": STRICT_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": 0.4,
-            }
-        ).encode("utf-8")
-        req = request.Request(
-            LOCAL_LLM_URL.rstrip("/") + "/chat/completions",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with request.urlopen(req, timeout=20) as response:
-            body = json.loads(response.read().decode("utf-8"))
-        return (body["choices"][0]["message"]["content"] or "").strip()
-
-    def _template_rewrite(self, original_text):
-        softened = original_text or ""
-        for word in HARSH_WORDS:
-            softened = re.sub(r"\b" + re.escape(word) + r"\b", "", softened, flags=re.IGNORECASE)
-        softened = re.sub(r"\s+", " ", softened).strip()
-        still_targeted = bool(
-            re.search(r"\b(you|your|yourself|npc|cringe)\b", softened, re.I)
-        )
-        if still_targeted or not softened:
-            softened = "I disagree with this approach and would like to handle the work differently."
-        else:
-            softened = softened[0].upper() + softened[1:]
-        candidate = self.templates[0].format(softened=softened)
-        try:
-            from modules.safety_patterns import SafetyPatternAnalyzer
-
-            if SafetyPatternAnalyzer().score(candidate).get("label") in ("REWRITE", "DELAYED-SEND"):
-                return self.templates[0].format(
-                    softened="I disagree with this approach and would like to handle the work differently."
-                )
-        except Exception:
-            pass
-        return candidate
+        raise RewriteServiceError(f"rewrite: Groq request failed for {self.groq_model}") from last_error
 
     def _analyze_text(self, text):
+        from modules.toxicity_model import ToxicityAnalysisError
+
         labels = ("toxic", "threat", "insult", "severe_toxic", "obscene", "identity_hate")
-        if not text or self.toxicity_analyzer is None:
-            return [0.0] * 6
-        try:
-            scores = self.toxicity_analyzer.analyze(text)
-            return [float(scores.get(label, 0.0)) for label in labels]
-        except Exception as exc:
-            logger.exception("Toxicity analysis failed during rewrite: %s", exc)
-            return [0.0] * 6
+        if not text:
+            raise ToxicityAnalysisError("toxicity analysis received empty rewrite text")
+        if self.toxicity_analyzer is None:
+            raise ToxicityAnalysisError(f"toxicity model is not loaded")
+        scores = self.toxicity_analyzer.analyze(text)
+        return [float(scores[label]) for label in labels]
 
     @staticmethod
     def _as_vector(scores):
@@ -419,28 +368,41 @@ class RewriteEngine:
             return [float(scores.get(label, 0.0)) for label in labels]
         if isinstance(scores, (list, tuple)) and len(scores) == 6:
             return [float(value) for value in scores]
-        return [0.0] * 6
+        raise RewriteServiceError("rewrite: toxicity scores are incomplete")
 
-    @staticmethod
-    def _init_groq():
-        api_key = os.getenv("GROQ_API_KEY")
+    def _ensure_groq(self):
+        api_key = _setting("GROQ_API_KEY")
+        configured = _setting("GROQ_MODEL") or REQUIRED_GROQ_MODEL
+        if configured != REQUIRED_GROQ_MODEL:
+            raise RewriteServiceError(
+                f"rewrite: GROQ_MODEL must be {REQUIRED_GROQ_MODEL}, not {configured}"
+            )
+        self.groq_model = REQUIRED_GROQ_MODEL
         if not api_key:
-            logger.info("GROQ_API_KEY not set; using local LLM or templates")
-            return None
+            raise RewriteServiceError("rewrite: GROQ_API_KEY is not configured")
+        if self.groq_client is not None and self._groq_key == api_key:
+            return self.groq_client
         try:
             from groq import Groq
 
-            return Groq(api_key=api_key)
+            self.groq_client = Groq(api_key=api_key)
+            self._groq_key = api_key
+            logger.info("Groq rewrite client ready model=%s", self.groq_model)
+            return self.groq_client
         except Exception as exc:
-            logger.warning("Groq client unavailable: %s", exc)
-            return None
+            logger.exception("Groq client could not be created")
+            raise RewriteServiceError("rewrite: Groq client could not be created") from exc
+
+    @staticmethod
+    def _repeats_original(original_text, candidate):
+        original = re.sub(r"\s+", " ", (original_text or "").strip().lower())
+        rewritten = re.sub(r"\s+", " ", (candidate or "").strip().lower())
+        if not original or not rewritten:
+            return False
+        return original in rewritten or rewritten in original
 
     @staticmethod
     def _init_toxicity_analyzer():
-        try:
-            from modules.toxicity_model import ToxicityAnalyzer
+        from modules.toxicity_model import ToxicityAnalyzer
 
-            return ToxicityAnalyzer()
-        except Exception as exc:
-            logger.warning("ToxicityAnalyzer unavailable for rewrite validation: %s", exc)
-            return None
+        return ToxicityAnalyzer()

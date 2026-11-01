@@ -29,14 +29,14 @@ function scoreOf(analysis, keys) {
 function AnalysisResults({ analysis, analyzing = false }) {
   if (analyzing && !analysis) {
     return (
-      <aside className="rounded-2xl border border-dashed border-slate-700 p-6 text-slate-500">
+      <aside className="rounded-2xl border border-dashed border-slate-200 p-6 text-slate-400">
         Analyzing risk…
       </aside>
     );
   }
   if (!analysis) {
     return (
-      <aside className="rounded-2xl border border-dashed border-slate-700 p-6 text-slate-500">
+      <aside className="rounded-2xl border border-dashed border-slate-200 p-6 text-slate-400">
         Analysis will appear here after you send or record a message.
       </aside>
     );
@@ -44,13 +44,17 @@ function AnalysisResults({ analysis, analyzing = false }) {
 
   const toxicity = analysis.toxicity || analysis.toxicity_scores || analysis;
   const decision = analysis.decision || analysis.risk?.decision || "ALLOW";
+  const slang = Array.isArray(analysis.slang) ? analysis.slang : [];
+  const baseline = analysis.behavioral_baseline;
+  const delta = analysis.delta_vector || analysis.delta_vector_6d;
+  const escalationFeature = scoreOf(analysis, ["escalation_feature"]);
   const pacl = scoreOf(analysis, ["pacl", "risk.pacl", "personalized_risk"]);
   const pEsc = scoreOf(analysis, ["escalation_probability", "p_esc", "risk.escalation_probability"]);
   const finalRisk = scoreOf(analysis, ["risk_score", "final_risk", "risk.final_risk"]);
   const style = DECISION_STYLES[decision] || DECISION_STYLES.ALLOW;
 
   return (
-    <aside className="rounded-2xl border border-slate-800 bg-panel p-5 space-y-5">
+    <aside className="space-y-5 rounded-2xl bg-white p-2">
       <div>
         <p className="text-xs uppercase tracking-widest text-slate-500">Decision</p>
         <div className={`mt-2 inline-block rounded-full border px-3 py-1 text-sm font-semibold ${style}`}>
@@ -72,7 +76,7 @@ function AnalysisResults({ analysis, analyzing = false }) {
                   <span>{label}</span>
                   <span>{value.toFixed(2)}</span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                   <div
                     className="h-full rounded-full bg-emerald-400"
                     style={{ width: `${Math.min(100, value * 100)}%` }}
@@ -84,16 +88,50 @@ function AnalysisResults({ analysis, analyzing = false }) {
         </div>
       </div>
 
+      {slang.length > 0 && (
+        <div>
+          <p className="mb-2 text-sm font-medium">Slang</p>
+          <ul className="space-y-2 text-sm">
+            {slang.map((item) => (
+              <li key={`${item.term}-${item.usage}`} className="rounded-lg bg-[#f6f7fb] p-3">
+                <p className="font-medium">{item.term}</p>
+                <p className="text-slate-400">
+                  {item.usage}
+                  {typeof item.confidence === "number" ? ` · ${item.confidence.toFixed(2)}` : ""}
+                </p>
+                {item.meaning && <p className="mt-1 text-slate-200">{item.meaning}</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <dl className="grid grid-cols-1 gap-3 text-sm">
-        <div className="rounded-lg bg-ink p-3">
+        <div className="rounded-lg bg-[#f6f7fb] p-3">
           <dt className="text-slate-400">Personalized risk (PACL)</dt>
           <dd className="font-mono text-lg">{pacl === null ? "—" : pacl.toFixed(2)}</dd>
         </div>
-        <div className="rounded-lg bg-ink p-3">
+        <div className="rounded-lg bg-[#f6f7fb] p-3">
+          <dt className="text-slate-400">Escalation feature</dt>
+          <dd className="font-mono text-lg">{escalationFeature === null ? "—" : escalationFeature.toFixed(2)}</dd>
+        </div>
+        <div className="rounded-lg bg-[#f6f7fb] p-3">
           <dt className="text-slate-400">Escalation probability</dt>
           <dd className="font-mono text-lg">{pEsc === null ? "—" : pEsc.toFixed(2)}</dd>
         </div>
-        <div className="rounded-lg bg-ink p-3">
+        {baseline && (
+          <div className="rounded-lg bg-[#f6f7fb] p-3">
+            <dt className="text-slate-400">Behavioral baseline (toxic)</dt>
+            <dd className="font-mono text-lg">{Number(baseline.toxic || 0).toFixed(2)}</dd>
+          </div>
+        )}
+        {Array.isArray(delta) && (
+          <div className="rounded-lg bg-[#f6f7fb] p-3">
+            <dt className="text-slate-400">Delta vector</dt>
+            <dd className="font-mono text-xs">{delta.map((value) => Number(value).toFixed(2)).join(", ")}</dd>
+          </div>
+        )}
+        <div className="rounded-lg bg-[#f6f7fb] p-3">
           <dt className="text-slate-400">Final risk</dt>
           <dd className="font-mono text-lg">{finalRisk === null ? "—" : finalRisk.toFixed(2)}</dd>
         </div>

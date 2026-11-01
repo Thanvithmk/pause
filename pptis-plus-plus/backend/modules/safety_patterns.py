@@ -54,8 +54,8 @@ QUOTE = re.compile(
 )
 NEGATED_HARM = re.compile(
     r"\b(not|never|don't|do not|won't|will not|wouldn't|didn't|nobody|no one|without)\b"
-    r".{0,48}\b(hurt|kill|attack|threaten|beat|weapon|smash|harm)\b|"
-    r"\b(hurt|kill|attack|threaten|beat|weapon)\b.{0,24}\b(not me|that's not me|not you)\b",
+    r".{0,48}\b(hurt|kill|attack|threaten|beat|weapon|smash|harm|stab|slash|cut)\b|"
+    r"\b(hurt|kill|attack|threaten|beat|weapon|stab|slash|cut)\b.{0,24}\b(not me|that's not me|not you)\b",
     re.I,
 )
 GAME_HARM = re.compile(
@@ -79,7 +79,7 @@ IDENTITY_VIOLENCE = re.compile(
 )
 THREAT = re.compile(
     r"\b(i will|i'll|imma|i am going to|i'm coming|gonna)\b.{0,40}\b("
-    r"hurt|kill|break|beat|smash|end you|jump|slash|put you on the ground|"
+    r"hurt|kill|break|beat|smash|stab|slash|cut you|cut your|cut off|end you|jump|put you on the ground|"
     r"make you pay|find you|make it physical)\b|"
     r"\b(break your jaw|get jumped|bat in my bag|need a doctor|"
     r"hostel room number|slash the tires|hurt you|come outside now|"
@@ -88,6 +88,7 @@ THREAT = re.compile(
     r"corner you|see you at the parking|behind the (library|gym|canteen|block))\b|"
     r"\bmaar dunga\b|\bhodiyutte\b|\bghar ke samne\b|\bpunch you\b|"
     r"\bkill yourself\b|\bkill you\b|\bbeat you\b|\bhurt you\b|"
+    r"\bstab you\b|\bslash you\b|\bcut you\b|\bcut your\b|"
     r"\bhandle you myself\b|\bget wrecked\b|\bget hurt\b|\bbury you\b|"
     r"\btrip down the stairs\b|\byou'll regret\b|\byou're finished\b|"
     r"\bfind your bike\b|\bboth get it\b|\bbring a helmet\b|"
@@ -259,8 +260,14 @@ class SafetyPatternAnalyzer:
         if KILL_IDIOM.search(sentence) or (PLAYFUL.search(combined) and re.search(r"\b(dead|fight|1v1)\b", sentence, re.I) and not THREAT.search(sentence)):
             return "ALLOW"
         if THREAT.search(sentence):
+            if PLAYFUL.search(sentence) and re.search(r"\b(plastic|toy|prop|pretend)\b", sentence, re.I):
+                return "ALLOW"
             return "DELAYED-SEND"
         if re.search(r"\byou(?:'re| are) dumb\b", sentence, re.I):
+            return "REWRITE"
+        if re.search(r"\byou(?:'re| are)\b.{0,48}\buseless\b", sentence, re.I) and not re.search(
+            r"\bnot\b.{0,24}\buseless\b", sentence, re.I
+        ):
             return "REWRITE"
         if INSULT.search(sentence) or DIRECTED_PROFANITY.search(sentence):
             if PLAYFUL.search(combined) and re.search(r"\bshut up\b", sentence, re.I) and re.search(r"\blol\b", sentence, re.I):
@@ -290,7 +297,9 @@ class SafetyPatternAnalyzer:
         overlay = result["vector"]
         merged = {}
         suppress = result.get("quoted") or result.get("negated") or result.get("playful_idiom")
-        if result.get("label") == "ALLOW":
+        # ALLOW means the regex found no harm. It does not cancel a model score.
+        # Quoted, negated, and playful lines still drop the model vector.
+        if result.get("label") == "ALLOW" and suppress:
             return {**result, "vector": dict(ZERO)}
         for label in LABELS:
             base = float((base_scores or {}).get(label, 0.0) or 0.0)

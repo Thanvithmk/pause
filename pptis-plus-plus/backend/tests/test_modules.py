@@ -14,7 +14,7 @@ from modules.decision_engine import DecisionEngine
 from modules.delayed_send import DelayedSendManager
 from modules.preprocessing import Preprocessor
 from modules.risk_calculation import RiskCalculator
-from modules.slang_layer import SlangInterpreter
+from modules.slang_layer import SlangInterpreter, SlangModelError
 from tests.fixtures import (
     CURRENT_VECTOR,
     DELTA_VECTOR,
@@ -84,16 +84,67 @@ class SlangModuleTests(unittest.TestCase):
         self.assertEqual(candidates[0]["term"], "cooked")
         self.assertEqual(candidates[0]["pos"], 11)
 
+    def test_missing_encoder_does_not_invent_probabilities(self):
+        """This case does not run model inference. It checks that a missing encoder raises."""
+        self.interpreter.encoder = None
+        self.interpreter._use_trained_head = False
+        with self.assertRaises(SlangModelError):
+            self.interpreter.disambiguate_slang_literal("cooked", "Bro you're cooked 💀")
+
+    def test_interpret_appends_meaning_without_replacing_text(self):
+        self.interpreter.disambiguate_slang_literal = lambda term, context: {
+            "term": term,
+            "p_slang": 0.8,
+            "p_literal": 0.2,
+            "classification": "slang" if "chicken" not in context else "literal",
+            "threshold": 0.58,
+            "source": "scripted",
+        }
+        slang = self.interpreter.interpret("Bro you're cooked 💀")
+        self.assertTrue(slang["enriched_text_with_context"].startswith("Bro you're cooked 💀"))
+        self.assertIn(
+            "[Contextual meaning: defeated / finished / in serious trouble]",
+            slang["enriched_text_with_context"],
+        )
+        self.assertNotIn("Bro you're defeated", slang["enriched_text_with_context"])
+        self.assertEqual(slang["detections"][0]["term"], "cooked")
+        self.assertEqual(slang["detections"][0]["usage"], "slang")
+        self.assertIn("trouble", slang["detections"][0]["meaning"])
+        literal = self.interpreter.interpret("The chicken is cooked.")
+        self.assertEqual(literal["enriched_text_with_context"], "The chicken is cooked.")
+        self.assertEqual(literal["detections"][0]["usage"], "literal")
+        self.assertIsNone(literal["detections"][0]["meaning"])
+        self.assertEqual(slang["detections"][0]["source"], "scripted")
+
     def test_enrich_preserves_original(self):
         self.interpreter.disambiguate_slang_literal = lambda term, context: {
             "term": term,
             "p_slang": 0.94,
             "p_literal": 0.06,
             "classification": "slang",
+            "threshold": 0.7,
         }
         result = self.interpreter.enrich_with_context(SLANG_TEXT, [{"term": "cooked", "pos": 12}])
         self.assertEqual(result["original_text"], SLANG_TEXT)
-        self.assertIn("cooked =", result["enriched_text_with_context"])
+        self.assertIn("[Contextual meaning:", result["enriched_text_with_context"])
+        self.assertTrue(result["enriched_text_with_context"].startswith(SLANG_TEXT))
+
+    def test_unknown_glorped_is_not_treated_as_toxic_slang(self):
+        result = self.interpreter.interpret("Bro is completely glorped.")
+        self.assertEqual(result["enriched_text_with_context"], "Bro is completely glorped.")
+        unknown_terms = [item["term"].lower() for item in result["unknown_slang"]]
+        self.assertIn("glorped", unknown_terms)
+        self.assertNotIn("completely", unknown_terms)
+        self.assertTrue(all(item.get("label") == "UNKNOWN_SLANG" for item in result["unknown_slang"]))
+        self.assertTrue(all(item.get("stored") is False for item in result["unknown_slang"]))
+
+    def test_missing_weights_do_not_invent_probabilities(self):
+        """This case does not run model inference."""
+        self.interpreter.encoder = None
+        self.interpreter.classifier = None
+        self.interpreter._use_trained_head = False
+        with self.assertRaises(SlangModelError):
+            self.interpreter.disambiguate_slang_literal("cooked", "Bro you're cooked 💀")
 
 
 class ToxicityModuleTests(unittest.TestCase):

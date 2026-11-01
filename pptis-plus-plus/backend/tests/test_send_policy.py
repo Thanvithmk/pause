@@ -4,7 +4,6 @@ import unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-os.environ.setdefault("PPTIS_LIGHT_MODE", "true")
 os.environ["FLASK_ENV"] = "testing"
 
 from api.routes import services
@@ -76,7 +75,7 @@ class SendPolicyTests(unittest.TestCase):
         self.assertEqual(status, 409)
 
     def test_warn_requires_send_anyway(self):
-        status, analysis = self._analyze("this is stupid")
+        status, analysis = self._analyze("Thanks for the notes.")
         self.assertEqual(status, 200)
         self._force_decision(analysis["message_id"], "WARN", 0.4)
         status, payload = self._send(analysis)
@@ -86,7 +85,7 @@ class SendPolicyTests(unittest.TestCase):
         self.assertTrue(payload["sent"])
 
     def test_rewrite_blocks_original(self):
-        status, analysis = self._analyze("you stupid idiot hate")
+        status, analysis = self._analyze("Thanks for the update.")
         self.assertEqual(status, 200)
         self._force_decision(analysis["message_id"], "REWRITE", 0.7)
         status, payload = self._send(analysis)

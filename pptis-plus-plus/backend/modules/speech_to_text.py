@@ -7,10 +7,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
-from faster_whisper import WhisperModel
 
 logger = logging.getLogger(__name__)
 
+REQUIRED_MODEL = "base.en"
 SUPPORTED_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".webm", ".aac", ".wma"}
 MODEL_SIZES = {
     "tiny": "39 MB",
@@ -27,42 +27,39 @@ MODEL_SIZES = {
     "large": "1550 MB",
 }
 DEFAULT_TIMEOUT_SECONDS = int(os.getenv("WHISPER_TIMEOUT_SECONDS", "120"))
+_WHISPER_CACHE = {}
+
+
+class VoiceModelError(RuntimeError):
+    """Whisper base.en could not transcribe. No transcript is invented."""
 
 
 class VoiceTranscriber:
     def __init__(self, model_name="base.en"):
-        self.model_name = model_name
-        self.device = "auto"
+        if model_name != REQUIRED_MODEL:
+            raise VoiceModelError(f"voice model must be {REQUIRED_MODEL}, not {model_name}")
+        configured = (os.getenv("WHISPER_MODEL") or REQUIRED_MODEL).strip()
+        if configured != REQUIRED_MODEL:
+            raise VoiceModelError(f"voice model must be {REQUIRED_MODEL}, not {configured}")
+        self.model_name = REQUIRED_MODEL
+        self.inference = "actual"
         self.compute_type = "int8"
-        self.language = "en" if str(model_name).endswith(".en") else "multilingual"
-        self.light_mode = os.getenv("PPTIS_LIGHT_MODE", "true").lower() in ("1", "true", "yes")
-        self.model = None
-        if self.light_mode:
-            logger.info("VoiceTranscriber light mode: Whisper weights are not loaded")
-            self.device = "CPU"
+        self.language = "en"
+        cached = _WHISPER_CACHE.get(REQUIRED_MODEL)
+        if cached is not None:
+            self.model, self.device = cached
             return
-        logger.info(
-            "Initializing Faster-Whisper model=%s device=%s compute_type=%s (download on first use)",
-            model_name,
-            self.device,
-            self.compute_type,
-        )
+        from faster_whisper import WhisperModel
+
+        logger.info("Initializing Faster-Whisper model=%s", REQUIRED_MODEL)
         try:
-            self.model = WhisperModel(
-                model_name,
-                device=self.device,
-                compute_type=self.compute_type,
-            )
-        except ValueError:
-            self.device = "cpu"
-            logger.warning("device=auto not supported; falling back to CPU")
-            self.model = WhisperModel(
-                model_name,
-                device=self.device,
-                compute_type=self.compute_type,
-            )
+            self.model = WhisperModel(REQUIRED_MODEL, device="cpu", compute_type=self.compute_type)
+        except Exception as exc:
+            logger.exception("Failed to load Whisper %s", REQUIRED_MODEL)
+            raise VoiceModelError(f"voice model {REQUIRED_MODEL} failed to load") from exc
         self.device = self._resolve_device()
-        logger.info("Faster-Whisper ready model=%s device=%s", model_name, self.device)
+        _WHISPER_CACHE[REQUIRED_MODEL] = (self.model, self.device)
+        logger.info("Faster-Whisper ready model=%s device=%s", REQUIRED_MODEL, self.device)
 
     def _resolve_device(self):
         try:
@@ -111,14 +108,7 @@ class VoiceTranscriber:
         started = datetime.now(timezone.utc)
         logger.info("Transcription started file=%s language=%s", path, language)
         if self.model is None:
-            return {
-                "success": False,
-                "text": "",
-                "language": language,
-                "duration": 0,
-                "timestamp": started.isoformat(),
-                "error": "Speech-to-text is unavailable until Whisper is enabled (PPTIS_LIGHT_MODE=false).",
-            }
+            raise VoiceModelError(f"voice model {REQUIRED_MODEL} is not loaded")
 
         if not path.is_file():
             logger.error("Audio file not found: %s", path)
@@ -206,12 +196,14 @@ class VoiceTranscriber:
                 len(text),
             )
             return text
-        except FuturesTimeout:
+        except FuturesTimeout as exc:
             logger.error("Stream transcription timed out")
-            return ""
+            raise VoiceModelError("voice transcription timed out") from exc
+        except VoiceModelError:
+            raise
         except Exception as exc:
             logger.exception("Stream transcription failed: %s", exc)
-            return ""
+            raise VoiceModelError("voice transcription failed") from exc
         finally:
             if tmp_path:
                 try:
@@ -251,6 +243,7 @@ class VoiceTranscriber:
 
     def get_model_info(self):
         return {
+            "inference": "actual",
             "model_name": self.model_name,
             "size": MODEL_SIZES.get(self.model_name, "unknown"),
             "language": self.language,

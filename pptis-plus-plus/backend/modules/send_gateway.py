@@ -78,11 +78,21 @@ def send_analyzed_message(
 
         decision = risk.decision
         lock = DelayedSendManager._blocking_lock(session, user_id, conversation.conversation_id)
+        released_delay_id = None
         if lock is not None:
             remaining = DelayedSendManager._remaining_seconds(lock)
             if remaining > 0:
                 raise SendError(f"Wait {remaining} seconds", 403)
-            raise SendError("Timer expired. Edit and re-analyze before sending.", 403)
+            acceptable = decision == DECISION_ALLOW or (
+                decision == DECISION_WARN and action == "send_anyway"
+            )
+            if lock.message_id == message.message_id or not acceptable:
+                if lock.message_id == message.message_id:
+                    raise SendError("Timer expired. Edit and re-analyze before sending.", 403)
+                raise SendError("Re-analysis is still high risk. A new intervention applies.", 403)
+            released_delay_id = lock.message_id
+            lock.is_active = False
+            lock.released_at = utcnow()
 
         if decision == DECISION_DELAYED:
             raise SendError("Delayed-send is active. Sending is not permitted.", 403)
@@ -155,6 +165,18 @@ def send_analyzed_message(
                 )
             except Exception:
                 logger.exception("RIL feedback failed message_id=%s", message.message_id)
+        if released_delay_id is not None:
+            try:
+                from modules.ril import BehavioralLearning
+
+                BehavioralLearning().record_intervention_outcome(
+                    released_delay_id,
+                    "DELAYED-SEND",
+                    "edited",
+                    "positive",
+                )
+            except Exception:
+                logger.exception("RIL delayed-send outcome failed message_id=%s", released_delay_id)
         return {
             "sent": True,
             "message_id": message.message_id,

@@ -231,7 +231,12 @@ class DecisionEngine:
             if callable(method):
                 result = method(original_text)
                 if isinstance(result, dict):
-                    return result.get("suggested_text") or result.get("text") or original_text
+                    suggested = result.get("suggested_text") or result.get("text")
+                    if not suggested:
+                        raise RuntimeError("rewrite: Groq did not return a suggestion")
+                    return suggested
+                if not result:
+                    raise RuntimeError("rewrite: Groq did not return a suggestion")
                 return result
         raise RuntimeError("RewriteEngine has no rewrite method")
 
@@ -297,5 +302,5 @@ class DecisionEngine:
                 return None
             return engine_cls()
         except Exception as exc:
-            logger.warning("Could not initialize RewriteEngine: %s", exc)
-            return None
+            logger.exception("Could not initialize RewriteEngine: %s", exc)
+            raise

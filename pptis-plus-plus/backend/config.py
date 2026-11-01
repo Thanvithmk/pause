@@ -15,19 +15,17 @@ def _database_uri():
     if uri:
         if uri.startswith("postgres://"):
             uri = uri.replace("postgres://", "postgresql://", 1)
+        if not uri.startswith("postgresql://"):
+            raise RuntimeError("database: PostgreSQL is required")
         return uri
 
-    use_postgres = os.getenv("USE_POSTGRES", "false").lower() in ("1", "true", "yes")
-    if use_postgres:
-        user = os.getenv("POSTGRES_USER", "pptis")
-        password = os.getenv("POSTGRES_PASSWORD", "pptis")
-        host = os.getenv("POSTGRES_HOST", "localhost")
-        port = os.getenv("POSTGRES_PORT", "5432")
-        name = os.getenv("POSTGRES_DB", "pptis")
-        return f"postgresql://{user}:{password}@{host}:{port}/{name}"
-
-    sqlite_path = os.getenv("SQLITE_PATH", str(BASE_DIR / "pptis.db"))
-    return f"sqlite:///{sqlite_path}"
+    user = os.getenv("POSTGRES_USER", "pptis")
+    password = os.getenv("POSTGRES_PASSWORD", "")
+    host = os.getenv("POSTGRES_HOST", "localhost")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    name = os.getenv("POSTGRES_DB", "pptis")
+    auth = f"{user}:{password}" if password else user
+    return f"postgresql://{auth}@{host}:{port}/{name}"
 
 
 def _cors_origins():

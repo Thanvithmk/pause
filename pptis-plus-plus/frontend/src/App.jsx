@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
-import { Navigate, NavLink, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import Chat from "./components/Chat";
 import BehaviorDashboard from "./components/BehaviorDashboard";
+import MessageHistory from "./components/MessageHistory";
+import SettingsPage from "./components/SettingsPage";
+import { ShellProvider } from "./components/AppShell";
 import { getProfile, getToken, login, logout, register } from "./services/api";
 
 function App() {
@@ -67,7 +70,7 @@ function App() {
 
   if (checking) {
     return (
-      <div className="min-h-screen grid place-items-center text-slate-400">
+      <div className="grid min-h-screen place-items-center bg-[#e7edf8] text-slate-400">
         Restoring session…
       </div>
     );
@@ -75,44 +78,54 @@ function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen grid place-items-center px-4">
+      <div className="grid min-h-screen place-items-center bg-[#e7edf8] px-4">
         <form
           onSubmit={handleAuth}
-          className="w-full max-w-md rounded-2xl border border-slate-700 bg-panel p-8 space-y-4"
+          className="w-full max-w-md space-y-4 rounded-[28px] bg-white p-8 shadow-[0_20px_60px_rgba(76,70,140,0.12)]"
         >
-          <p className="font-mono text-xs tracking-[0.2em] text-emerald-400">PPTIS++</p>
-          <h1 className="text-2xl font-semibold">Sign in to continue</h1>
+          <div className="flex items-center gap-3">
+            <span className="grid h-11 w-11 place-items-center rounded-2xl bg-[#5b4dff] text-white">
+              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M12 3 5 6v6c0 4.2 2.8 7.2 7 9 4.2-1.8 7-4.8 7-9V6l-7-3Z" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <div>
+              <p className="text-lg font-bold text-slate-900">PPTIS++</p>
+              <p className="text-xs text-slate-400">Think Before You Send</p>
+            </div>
+          </div>
+          <h1 className="text-2xl font-semibold text-slate-900">Sign in to continue</h1>
           {authMode === "register" && (
             <input
-              className="w-full rounded-lg bg-ink px-3 py-2 outline-none ring-1 ring-slate-600"
+              className="w-full rounded-2xl bg-[#f6f7fb] px-4 py-3 outline-none ring-1 ring-transparent focus:ring-[#5b4dff]"
               placeholder="Username"
               value={authForm.username}
               onChange={(event) => setAuthForm({ ...authForm, username: event.target.value })}
             />
           )}
           <input
-            className="w-full rounded-lg bg-ink px-3 py-2 outline-none ring-1 ring-slate-600"
+            className="w-full rounded-2xl bg-[#f6f7fb] px-4 py-3 outline-none ring-1 ring-transparent focus:ring-[#5b4dff]"
             placeholder="Email or username"
             value={authForm.email}
             onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })}
           />
           <input
             type="password"
-            className="w-full rounded-lg bg-ink px-3 py-2 outline-none ring-1 ring-slate-600"
+            className="w-full rounded-2xl bg-[#f6f7fb] px-4 py-3 outline-none ring-1 ring-transparent focus:ring-[#5b4dff]"
             placeholder="Password"
             value={authForm.password}
             onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
           />
           {authMode === "register" && (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-400">
               Password needs 8+ characters, one uppercase letter, one digit, and one special character.
             </p>
           )}
-          {authError && <p className="text-sm text-delay">{authError}</p>}
+          {authError && <p className="text-sm text-rose-500">{authError}</p>}
           <button
             type="submit"
             disabled={authLoading}
-            className="w-full rounded-lg bg-emerald-500 py-2 font-medium text-ink disabled:opacity-60"
+            className="w-full rounded-full bg-[#5b4dff] py-3 font-semibold text-white disabled:opacity-60"
           >
             {authLoading ? "Working…" : authMode === "login" ? "Log in" : "Register"}
           </button>
@@ -129,40 +142,16 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-        <div>
-          <p className="font-mono text-xs tracking-[0.25em] text-emerald-400">PPTIS++</p>
-          <p className="text-sm text-slate-400">Personalized Predictive Toxicity Intervention</p>
-        </div>
-        <nav className="flex items-center gap-4 text-sm">
-          <NavLink
-            to="/chat"
-            className={({ isActive }) => (isActive ? "text-emerald-400" : "text-slate-400")}
-          >
-            Chat
-          </NavLink>
-          <NavLink
-            to="/dashboard"
-            className={({ isActive }) => (isActive ? "text-emerald-400" : "text-slate-400")}
-          >
-            Dashboard
-          </NavLink>
-          <span className="text-slate-500">{user.username || user.email}</span>
-          <button type="button" onClick={handleLogout} className="text-slate-400">
-            Log out
-          </button>
-        </nav>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <Routes>
-          <Route path="/" element={<Navigate to="/chat" replace />} />
-          <Route path="/chat" element={<Chat user={user} />} />
-          <Route path="/dashboard" element={<BehaviorDashboard />} />
-          <Route path="/login" element={<Navigate to="/chat" replace />} />
-        </Routes>
-      </main>
-    </div>
+    <ShellProvider user={user} onLogout={handleLogout}>
+      <Routes>
+        <Route path="/" element={<Navigate to="/chat" replace />} />
+        <Route path="/chat" element={<Chat user={user} />} />
+        <Route path="/dashboard" element={<BehaviorDashboard />} />
+        <Route path="/history" element={<MessageHistory />} />
+        <Route path="/settings" element={<SettingsPage user={user} onLogout={handleLogout} />} />
+        <Route path="/login" element={<Navigate to="/chat" replace />} />
+      </Routes>
+    </ShellProvider>
   );
 }
 

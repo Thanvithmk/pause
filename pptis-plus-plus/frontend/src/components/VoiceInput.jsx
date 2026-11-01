@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { analyzeVoice } from "../services/api";
 
-function VoiceInput({ onAnalyzed, conversationId }) {
+function VoiceInput({ onAnalyzed, conversationId, compact = false }) {
   const [recording, setRecording] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -82,8 +82,28 @@ function VoiceInput({ onAnalyzed, conversationId }) {
     setRecording(false);
   }
 
+  if (compact) {
+    return (
+      <div className="relative">
+        <button
+          type="button"
+          onClick={recording ? stopRecording : startRecording}
+          disabled={loading}
+          aria-label={recording ? "Stop recording" : "Record voice"}
+          className={`grid h-10 w-10 place-items-center rounded-full ${recording ? "bg-rose-100 text-rose-500" : "text-slate-400"}`}
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <rect x="9" y="3" width="6" height="11" rx="3" />
+            <path d="M6 11a6 6 0 0 0 12 0M12 17v3" strokeLinecap="round" />
+          </svg>
+        </button>
+        {error && <p className="absolute right-0 top-11 w-48 text-xs text-rose-500">{error}</p>}
+      </div>
+    );
+  }
+
   return (
-    <div className="rounded-xl border border-slate-800 p-3 space-y-2">
+    <div className="space-y-2 rounded-xl border border-slate-200 p-3">
       <div className="flex items-center gap-3">
         {!recording ? (
           <button

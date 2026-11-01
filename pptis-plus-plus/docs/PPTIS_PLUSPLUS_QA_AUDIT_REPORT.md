@@ -1,3 +1,5 @@
+Historical record only. Light mode has been removed. Do not start the current application with a light-mode setting. See README.md.
+
 # PPTIS++ classification QA audit
 
 Executed: 1 November 2026. Light-mode lexicon + safety-pattern pipeline (`PPTIS_LIGHT_MODE=true`). Dataset: 265 new cases in `backend/tests/audit_dataset.py` (categories A–Q). Results workbook: `docs/PPTIS_PLUSPLUS_QA_AUDIT_RESULTS.xlsx`.

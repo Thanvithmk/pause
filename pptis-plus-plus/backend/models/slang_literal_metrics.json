@@ -1,0 +1,610 @@
+{
+  "encoder_name": "xlm-roberta-base",
+  "encoder_trained_on_slang": false,
+  "head": "L2 logistic regression on the frozen mean of target-token hidden states",
+  "penalty_C": 1.0,
+  "seed": 42,
+  "device": "cpu",
+  "dataset": "/Users/thanvithmk/Documents/MP_Lastest/pptis-plus-plus/backend/data/slang_context_labels.csv",
+  "counts": {
+    "train": 96,
+    "val": 28,
+    "test": 24
+  },
+  "label_counts": {
+    "train": {
+      "literal": 47,
+      "slang": 49
+    },
+    "val": {
+      "literal": 14,
+      "slang": 14
+    },
+    "test": {
+      "literal": 12,
+      "slang": 12
+    }
+  },
+  "checkpoint": "/Users/thanvithmk/Documents/MP_Lastest/pptis-plus-plus/backend/models/slang_literal_head.pt",
+  "threshold": 0.58,
+  "threshold_rule": "validation sweep maximizing macro F1, then Youden J, then literal recall",
+  "validation": {
+    "confusion_matrix": {
+      "labels": [
+        "literal",
+        "slang"
+      ],
+      "rows_are": "actual",
+      "columns_are": "predicted",
+      "values": [
+        [
+          14,
+          0
+        ],
+        [
+          1,
+          13
+        ]
+      ]
+    },
+    "literal": {
+      "precision": 0.9333333333333333,
+      "recall": 1.0,
+      "f1": 0.9655172413793104,
+      "support": 14
+    },
+    "slang": {
+      "precision": 1.0,
+      "recall": 0.9285714285714286,
+      "f1": 0.962962962962963,
+      "support": 14
+    },
+    "macro_f1": 0.9642401021711366,
+    "youden_j": 0.9285714285714286
+  },
+  "test": {
+    "confusion_matrix": {
+      "labels": [
+        "literal",
+        "slang"
+      ],
+      "rows_are": "actual",
+      "columns_are": "predicted",
+      "values": [
+        [
+          11,
+          1
+        ],
+        [
+          1,
+          11
+        ]
+      ]
+    },
+    "literal": {
+      "precision": 0.9166666666666666,
+      "recall": 0.9166666666666666,
+      "f1": 0.9166666666666666,
+      "support": 12
+    },
+    "slang": {
+      "precision": 0.9166666666666666,
+      "recall": 0.9166666666666666,
+      "f1": 0.9166666666666666,
+      "support": 12
+    },
+    "macro_f1": 0.9166666666666666,
+    "youden_j": 0.8333333333333333
+  },
+  "test_predictions": [
+    {
+      "sentence": "The chicken is cooked.",
+      "target": "cooked",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.1736065298318863,
+      "p_literal": 0.8263934701681137
+    },
+    {
+      "sentence": "Bro you're cooked \ud83d\udc80",
+      "target": "cooked",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.7428169250488281,
+      "p_literal": 0.2571830749511719
+    },
+    {
+      "sentence": "I cooked dinner.",
+      "target": "cooked",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.27691367268562317,
+      "p_literal": 0.7230863273143768
+    },
+    {
+      "sentence": "That exam cooked me.",
+      "target": "cooked",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.7135517597198486,
+      "p_literal": 0.28644824028015137
+    },
+    {
+      "sentence": "This fit is fire.",
+      "target": "fire",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.9104198217391968,
+      "p_literal": 0.08958017826080322
+    },
+    {
+      "sentence": "The building caught fire.",
+      "target": "fire",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.046052224934101105,
+      "p_literal": 0.9539477750658989
+    },
+    {
+      "sentence": "The soup is cooked down into a sauce.",
+      "target": "cooked",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.06919772177934647,
+      "p_literal": 0.9308022782206535
+    },
+    {
+      "sentence": "Nah you're cooked in this lobby.",
+      "target": "cooked",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.6716632843017578,
+      "p_literal": 0.3283367156982422
+    },
+    {
+      "sentence": "We cooked rice and beans.",
+      "target": "cooked",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.153622567653656,
+      "p_literal": 0.846377432346344
+    },
+    {
+      "sentence": "The final cooked me completely.",
+      "target": "cooked",
+      "gold": "slang",
+      "predicted": "uncertain",
+      "p_slang": 0.47769054770469666,
+      "p_literal": 0.5223094522953033
+    },
+    {
+      "sentence": "A small fire burned in the grate.",
+      "target": "fire",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.03970271348953247,
+      "p_literal": 0.9602972865104675
+    },
+    {
+      "sentence": "Her speech was fire.",
+      "target": "fire",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.9360666275024414,
+      "p_literal": 0.0639333724975586
+    },
+    {
+      "sentence": "He is sick with the flu.",
+      "target": "sick",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.2624892592430115,
+      "p_literal": 0.7375107407569885
+    },
+    {
+      "sentence": "That header was sick.",
+      "target": "sick",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.7424323558807373,
+      "p_literal": 0.2575676441192627
+    },
+    {
+      "sentence": "The remote battery is dead.",
+      "target": "dead",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.3179508447647095,
+      "p_literal": 0.6820491552352905
+    },
+    {
+      "sentence": "I'm dead that was hilarious.",
+      "target": "dead",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.9687605500221252,
+      "p_literal": 0.031239449977874756
+    },
+    {
+      "sentence": "She ate an apple.",
+      "target": "ate",
+      "gold": "literal",
+      "predicted": "slang",
+      "p_slang": 0.6325107216835022,
+      "p_literal": 0.3674892783164978
+    },
+    {
+      "sentence": "She ate that dance.",
+      "target": "ate",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.6726697087287903,
+      "p_literal": 0.3273302912712097
+    },
+    {
+      "sentence": "Put the cap back on the bottle.",
+      "target": "cap",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.04681115597486496,
+      "p_literal": 0.953188844025135
+    },
+    {
+      "sentence": "That's cap.",
+      "target": "cap",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.9647480845451355,
+      "p_literal": 0.0352519154548645
+    },
+    {
+      "sentence": "The chips are salty.",
+      "target": "salty",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.343365341424942,
+      "p_literal": 0.656634658575058
+    },
+    {
+      "sentence": "He's salty about the score.",
+      "target": "salty",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.8954442143440247,
+      "p_literal": 0.10455578565597534
+    },
+    {
+      "sentence": "Bring an extra plate.",
+      "target": "extra",
+      "gold": "literal",
+      "predicted": "uncertain",
+      "p_slang": 0.5666380524635315,
+      "p_literal": 0.4333619475364685
+    },
+    {
+      "sentence": "You're being extra.",
+      "target": "extra",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.8883152604103088,
+      "p_literal": 0.11168473958969116
+    }
+  ],
+  "contrast_examples": [
+    {
+      "sentence": "The chicken is cooked.",
+      "target": "cooked",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.1736065298318863,
+      "p_literal": 0.8263934701681137
+    },
+    {
+      "sentence": "Bro you're cooked \ud83d\udc80",
+      "target": "cooked",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.7428169250488281,
+      "p_literal": 0.2571830749511719
+    },
+    {
+      "sentence": "I cooked dinner.",
+      "target": "cooked",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.27691367268562317,
+      "p_literal": 0.7230863273143768
+    },
+    {
+      "sentence": "That exam cooked me.",
+      "target": "cooked",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.7135517597198486,
+      "p_literal": 0.28644824028015137
+    },
+    {
+      "sentence": "This fit is fire.",
+      "target": "fire",
+      "gold": "slang",
+      "predicted": "slang",
+      "p_slang": 0.9104198217391968,
+      "p_literal": 0.08958017826080322
+    },
+    {
+      "sentence": "The building caught fire.",
+      "target": "fire",
+      "gold": "literal",
+      "predicted": "literal",
+      "p_slang": 0.046052224934101105,
+      "p_literal": 0.9539477750658989
+    }
+  ],
+  "fallback": {
+    "threshold": 0.7,
+    "threshold_rule": "validation sweep maximizing macro F1, then Youden J, then literal recall",
+    "validation": {
+      "confusion_matrix": {
+        "labels": [
+          "literal",
+          "slang"
+        ],
+        "rows_are": "actual",
+        "columns_are": "predicted",
+        "values": [
+          [
+            14,
+            0
+          ],
+          [
+            4,
+            10
+          ]
+        ]
+      },
+      "literal": {
+        "precision": 0.7777777777777778,
+        "recall": 1.0,
+        "f1": 0.8750000000000001,
+        "support": 14
+      },
+      "slang": {
+        "precision": 1.0,
+        "recall": 0.7142857142857143,
+        "f1": 0.8333333333333333,
+        "support": 14
+      },
+      "macro_f1": 0.8541666666666667,
+      "youden_j": 0.7142857142857144
+    },
+    "test": {
+      "confusion_matrix": {
+        "labels": [
+          "literal",
+          "slang"
+        ],
+        "rows_are": "actual",
+        "columns_are": "predicted",
+        "values": [
+          [
+            12,
+            0
+          ],
+          [
+            2,
+            10
+          ]
+        ]
+      },
+      "literal": {
+        "precision": 0.8571428571428571,
+        "recall": 1.0,
+        "f1": 0.923076923076923,
+        "support": 12
+      },
+      "slang": {
+        "precision": 1.0,
+        "recall": 0.8333333333333334,
+        "f1": 0.9090909090909091,
+        "support": 12
+      },
+      "macro_f1": 0.916083916083916,
+      "youden_j": 0.8333333333333335
+    },
+    "test_predictions": [
+      {
+        "sentence": "The chicken is cooked.",
+        "target": "cooked",
+        "gold": "literal",
+        "predicted": "literal",
+        "p_slang": 0.18440629630084784,
+        "p_literal": 0.8155937036991522
+      },
+      {
+        "sentence": "Bro you're cooked \ud83d\udc80",
+        "target": "cooked",
+        "gold": "slang",
+        "predicted": "slang",
+        "p_slang": 0.8276516299687621,
+        "p_literal": 0.17234837003123793
+      },
+      {
+        "sentence": "I cooked dinner.",
+        "target": "cooked",
+        "gold": "literal",
+        "predicted": "uncertain",
+        "p_slang": 0.3558485603263478,
+        "p_literal": 0.6441514396736522
+      },
+      {
+        "sentence": "That exam cooked me.",
+        "target": "cooked",
+        "gold": "slang",
+        "predicted": "slang",
+        "p_slang": 0.8425879321594584,
+        "p_literal": 0.15741206784054163
+      },
+      {
+        "sentence": "This fit is fire.",
+        "target": "fire",
+        "gold": "slang",
+        "predicted": "slang",
+        "p_slang": 0.8872421353639895,
+        "p_literal": 0.11275786463601045
+      },
+      {
+        "sentence": "The building caught fire.",
+        "target": "fire",
+        "gold": "literal",
+        "predicted": "literal",
+        "p_slang": 0.2976314570597349,
+        "p_literal": 0.7023685429402651
+      },
+      {
+        "sentence": "The soup is cooked down into a sauce.",
+        "target": "cooked",
+        "gold": "literal",
+        "predicted": "literal",
+        "p_slang": 0.25023517418010144,
+        "p_literal": 0.7497648258198986
+      },
+      {
+        "sentence": "Nah you're cooked in this lobby.",
+        "target": "cooked",
+        "gold": "slang",
+        "predicted": "slang",
+        "p_slang": 0.7881978702966129,
+        "p_literal": 0.21180212970338708
+      },
+      {
+        "sentence": "We cooked rice and beans.",
+        "target": "cooked",
+        "gold": "literal",
+        "predicted": "uncertain",
+        "p_slang": 0.5188923108103791,
+        "p_literal": 0.4811076891896209
+      },
+      {
+        "sentence": "The final cooked me completely.",
+        "target": "cooked",
+        "gold": "slang",
+        "predicted": "uncertain",
+        "p_slang": 0.40525022769517505,
+        "p_literal": 0.594749772304825
+      },
+      {
+        "sentence": "A small fire burned in the grate.",
+        "target": "fire",
+        "gold": "literal",
+        "predicted": "literal",
+        "p_slang": 0.28598920912538683,
+        "p_literal": 0.7140107908746132
+      },
+      {
+        "sentence": "Her speech was fire.",
+        "target": "fire",
+        "gold": "slang",
+        "predicted": "slang",
+        "p_slang": 0.7685612293027562,
+        "p_literal": 0.23143877069724383
+      },
+      {
+        "sentence": "He is sick with the flu.",
+        "target": "sick",
+        "gold": "literal",
+        "predicted": "literal",
+        "p_slang": 0.20015804368382165,
+        "p_literal": 0.7998419563161784
+      },
+      {
+        "sentence": "That header was sick.",
+        "target": "sick",
+        "gold": "slang",
+        "predicted": "slang",
+        "p_slang": 0.7905297959910872,
+        "p_literal": 0.2094702040089128
+      },
+      {
+        "sentence": "The remote battery is dead.",
+        "target": "dead",
+        "gold": "literal",
+        "predicted": "literal",
+        "p_slang": 0.2604594395251323,
+        "p_literal": 0.7395405604748677
+      },
+      {
+        "sentence": "I'm dead that was hilarious.",
+        "target": "dead",
+        "gold": "slang",
+        "predicted": "slang",
+        "p_slang": 0.8323179238772733,
+        "p_literal": 0.16768207612272668
+      },
+      {
+        "sentence": "She ate an apple.",
+        "target": "ate",
+        "gold": "literal",
+        "predicted": "uncertain",
+        "p_slang": 0.4746753991778643,
+        "p_literal": 0.5253246008221357
+      },
+      {
+        "sentence": "She ate that dance.",
+        "target": "ate",
+        "gold": "slang",
+        "predicted": "slang",
+        "p_slang": 0.7562727701786499,
+        "p_literal": 0.2437272298213501
+      },
+      {
+        "sentence": "Put the cap back on the bottle.",
+        "target": "cap",
+        "gold": "literal",
+        "predicted": "literal",
+        "p_slang": 0.10332156238333932,
+        "p_literal": 0.8966784376166607
+      },
+      {
+        "sentence": "That's cap.",
+        "target": "cap",
+        "gold": "slang",
+        "predicted": "slang",
+        "p_slang": 0.8185793320000823,
+        "p_literal": 0.18142066799991774
+      },
+      {
+        "sentence": "The chips are salty.",
+        "target": "salty",
+        "gold": "literal",
+        "predicted": "uncertain",
+        "p_slang": 0.32254488040376966,
+        "p_literal": 0.6774551195962304
+      },
+      {
+        "sentence": "He's salty about the score.",
+        "target": "salty",
+        "gold": "slang",
+        "predicted": "uncertain",
+        "p_slang": 0.6026412786706872,
+        "p_literal": 0.3973587213293128
+      },
+      {
+        "sentence": "Bring an extra plate.",
+        "target": "extra",
+        "gold": "literal",
+        "predicted": "uncertain",
+        "p_slang": 0.5489954801449889,
+        "p_literal": 0.4510045198550111
+      },
+      {
+        "sentence": "You're being extra.",
+        "target": "extra",
+        "gold": "slang",
+        "predicted": "slang",
+        "p_slang": 0.8342871172596336,
+        "p_literal": 0.16571288274036644
+      }
+    ]
+  },
+  "note": "Probabilities are the trained head's outputs on this hand-labelled file. They are not the illustrative 0.04/0.96 figures printed in the master plan. The fallback model is not the contextual transformer."
+}
