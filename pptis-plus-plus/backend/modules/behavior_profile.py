@@ -16,6 +16,11 @@ from modules.database import (
 
 logger = logging.getLogger(__name__)
 
+_PROFILE_CACHE = OrderedDict()
+
+
+def clear_profile_cache():
+    _PROFILE_CACHE.clear()
 BASELINE_ORDER = (
     ("avg_toxic", "toxic"),
     ("avg_threat", "threat"),
@@ -31,7 +36,6 @@ ESCALATION_DECISIONS = ("WARN", "REWRITE", "DELAYED-SEND")
 
 class BehaviorProfileManager:
     def __init__(self):
-        self._cache = OrderedDict()
         get_session()
         logger.info("BehaviorProfileManager initialized")
 
@@ -86,49 +90,20 @@ class BehaviorProfileManager:
             return self._vector_from_dict(data)
         except Exception as exc:
             logger.exception("Failed to get profile user_id=%s error=%s", user_id, exc)
-            return list(NEUTRAL_BASELINE)
+            raise
         finally:
             close_session()
 
     def update_profile(self, user_id, new_toxicity_vector):
-        vector = self._normalize_vector(new_toxicity_vector)
         session = get_session()
         try:
-            profile = (
-                session.query(BehaviorProfile)
-                .filter(BehaviorProfile.user_id == user_id)
-                .one_or_none()
-            )
-            if profile is None:
-                profile = BehaviorProfile(
-                    user_id=user_id,
-                    avg_toxic=0.0,
-                    avg_threat=0.0,
-                    avg_insult=0.0,
-                    avg_severe_toxic=0.0,
-                    avg_obscene=0.0,
-                    avg_identity_hate=0.0,
-                    message_count=0,
-                )
-                session.add(profile)
-                session.flush()
-
-            n = profile.message_count or 0
-            for column, key in BASELINE_ORDER:
-                previous = float(getattr(profile, column) or 0.0)
-                incoming = vector[key]
-                updated = incoming if n == 0 else (n * previous + incoming) / (n + 1)
-                setattr(profile, column, max(0.0, min(1.0, updated)))
-            profile.message_count = n + 1
+            data = self.apply_vector(session, user_id, new_toxicity_vector)
             session.commit()
-            session.refresh(profile)
-
-            data = self._to_dict(profile)
-            self._cache_put(user_id, data)
+            self.remember(user_id, data)
             logger.info(
                 "Updated behavior profile user_id=%s message_count=%s",
                 user_id,
-                profile.message_count,
+                data["message_count"],
             )
             return data
         except Exception as exc:
@@ -137,6 +112,41 @@ class BehaviorProfileManager:
             raise
         finally:
             close_session()
+
+    def apply_vector(self, session, user_id, new_toxicity_vector):
+        """Increment the baseline inside the caller's transaction. Does not commit."""
+        vector = self._normalize_vector(new_toxicity_vector)
+        query = session.query(BehaviorProfile).filter(BehaviorProfile.user_id == user_id)
+        bind = session.get_bind()
+        if bind is not None and bind.dialect.name == "postgresql":
+            query = query.with_for_update()
+        profile = query.one_or_none()
+        if profile is None:
+            profile = BehaviorProfile(
+                user_id=user_id,
+                avg_toxic=0.0,
+                avg_threat=0.0,
+                avg_insult=0.0,
+                avg_severe_toxic=0.0,
+                avg_obscene=0.0,
+                avg_identity_hate=0.0,
+                message_count=0,
+            )
+            session.add(profile)
+            session.flush()
+
+        n = profile.message_count or 0
+        for column, key in BASELINE_ORDER:
+            previous = float(getattr(profile, column) or 0.0)
+            incoming = vector[key]
+            updated = incoming if n == 0 else (n * previous + incoming) / (n + 1)
+            setattr(profile, column, max(0.0, min(1.0, updated)))
+        profile.message_count = n + 1
+        profile.updated_at = datetime.now(timezone.utc)
+        return self._to_dict(profile)
+
+    def remember(self, user_id, data):
+        self._cache_put(user_id, data)
 
     def calculate_averages(self, user_id):
         session = get_session()
@@ -161,7 +171,7 @@ class BehaviorProfileManager:
             return baseline
         except Exception as exc:
             logger.exception("Failed to calculate averages user_id=%s error=%s", user_id, exc)
-            return list(NEUTRAL_BASELINE)
+            raise
         finally:
             close_session()
 
@@ -251,13 +261,13 @@ class BehaviorProfileManager:
         return {key: float(source.get(key, 0.0)) for _, key in BASELINE_ORDER}
 
     def _cache_get(self, user_id):
-        if user_id not in self._cache:
+        if user_id not in _PROFILE_CACHE:
             return None
-        self._cache.move_to_end(user_id)
-        return dict(self._cache[user_id])
+        _PROFILE_CACHE.move_to_end(user_id)
+        return dict(_PROFILE_CACHE[user_id])
 
     def _cache_put(self, user_id, data):
-        self._cache[user_id] = dict(data)
-        self._cache.move_to_end(user_id)
-        while len(self._cache) > CACHE_SIZE:
-            self._cache.popitem(last=False)
+        _PROFILE_CACHE[user_id] = dict(data)
+        _PROFILE_CACHE.move_to_end(user_id)
+        while len(_PROFILE_CACHE) > CACHE_SIZE:
+            _PROFILE_CACHE.popitem(last=False)

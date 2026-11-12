@@ -21,7 +21,7 @@ from modules.risk_calculation import RiskCalculator
 
 logger = logging.getLogger(__name__)
 
-REQUIRED_GROQ_MODEL = "llama-3.1-8b-instant"
+REQUIRED_GROQ_MODEL = "openai/gpt-oss-120b"
 _ENV_FILES = (
     Path(__file__).resolve().parents[2] / ".env",
     Path(__file__).resolve().parents[1] / ".env",
@@ -62,6 +62,21 @@ def _setting(name):
     return (os.getenv(name) or "").strip().strip('"').strip("'")
 
 
+def _context_texts(context_messages):
+    texts = []
+    for item in context_messages or []:
+        if isinstance(item, str):
+            piece = item
+        elif isinstance(item, dict):
+            piece = item.get("text") or ""
+        else:
+            piece = ""
+        piece = str(piece).strip()
+        if piece:
+            texts.append(piece)
+    return texts
+
+
 class RewriteEngine:
     def __init__(self):
         self.groq_client = None
@@ -85,13 +100,15 @@ class RewriteEngine:
         if conversation_id is not None and message_id is not None:
             context_messages = self.get_conversation_context(conversation_id, message_id)
         suggested = self.generate_candidate_rewrite(original_text, context_messages)
-        original_scores = self._analyze_text(original_text)
-        validation = self.validate_rewrite(suggested, original_scores)
+        history = _context_texts(context_messages)
+        suggestion_history = history + [original_text]
+        original_scores = self._analyze_text(original_text, history)
+        validation = self.validate_rewrite(suggested, original_scores, suggestion_history)
         if not validation["is_safer"]:
             handled = self.handle_unsafe_rewrite(original_text, context_messages)
             suggested = handled["suggested_text"]
             validation = handled.get("validation") or self.validate_rewrite(
-                suggested or "", original_scores
+                suggested or "", original_scores, suggestion_history
             )
         context_ids = [item["message_id"] for item in context_messages]
         suggestion_analysis = None
@@ -218,9 +235,9 @@ class RewriteEngine:
         logger.info("Generated rewrite via Groq chars=%s model=%s", len(suggested), self.groq_model)
         return suggested
 
-    def validate_rewrite(self, suggested_text, original_toxicity_scores):
+    def validate_rewrite(self, suggested_text, original_toxicity_scores, context_messages=None):
         original_vector = self._as_vector(original_toxicity_scores)
-        new_vector = self._analyze_text(suggested_text)
+        new_vector = self._analyze_text(suggested_text, context_messages)
         original_tb = original_vector[0]
         new_tb = new_vector[0]
         baseline = original_tb
@@ -282,7 +299,9 @@ class RewriteEngine:
             close_session()
 
     def handle_unsafe_rewrite(self, original_text, context_messages):
-        original_scores = self._analyze_text(original_text)
+        history = _context_texts(context_messages)
+        suggestion_history = history + [original_text]
+        original_scores = self._analyze_text(original_text, history)
         for attempt in range(MAX_REWRITE_ATTEMPTS):
             logger.info("Retrying safer rewrite attempt=%s", attempt + 1)
             prompt = (
@@ -294,7 +313,7 @@ class RewriteEngine:
             candidate = self._complete(prompt)
             if not candidate or self._repeats_original(original_text, candidate):
                 continue
-            validation = self.validate_rewrite(candidate, original_scores)
+            validation = self.validate_rewrite(candidate, original_scores, suggestion_history)
             if validation["is_safer"]:
                 return {
                     "suggested_text": candidate,
@@ -350,15 +369,20 @@ class RewriteEngine:
                 break
         raise RewriteServiceError(f"rewrite: Groq request failed for {self.groq_model}") from last_error
 
-    def _analyze_text(self, text):
+    def _analyze_text(self, text, context_messages=None):
         from modules.toxicity_model import ToxicityAnalysisError
 
         labels = ("toxic", "threat", "insult", "severe_toxic", "obscene", "identity_hate")
         if not text:
             raise ToxicityAnalysisError("toxicity analysis received empty rewrite text")
         if self.toxicity_analyzer is None:
-            raise ToxicityAnalysisError(f"toxicity model is not loaded")
-        scores = self.toxicity_analyzer.analyze(text)
+            raise ToxicityAnalysisError("toxicity model is not loaded")
+        history = _context_texts(context_messages)
+        if history:
+            detail = self.toxicity_analyzer.inspect(text, context_messages=history)
+            scores = detail["model"]
+        else:
+            scores = self.toxicity_analyzer.analyze(text)
         return [float(scores[label]) for label in labels]
 
     @staticmethod

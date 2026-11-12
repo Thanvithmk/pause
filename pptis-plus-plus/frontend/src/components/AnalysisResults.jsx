@@ -60,6 +60,20 @@ function AnalysisResults({ analysis, analyzing = false }) {
         <div className={`mt-2 inline-block rounded-full border px-3 py-1 text-sm font-semibold ${style}`}>
           {decision}
         </div>
+        {analysis.mathematical_decision && analysis.mathematical_decision !== decision && (
+          <p className="mt-2 text-xs text-slate-500">
+            Mathematical risk is {analysis.mathematical_decision}. A separate safety guardrail raised the intervention
+            {analysis.guardrail ? ` (${analysis.guardrail})` : ""}. Final risk was not changed.
+          </p>
+        )}
+        {analysis.guardrail && analysis.mathematical_decision === decision && (
+          <p className="mt-2 text-xs text-slate-500">Safety guardrail: {analysis.guardrail}</p>
+        )}
+        {analysis.rewrite?.status === "unavailable" && (
+          <p className="mt-2 text-xs text-slate-500">
+            {analysis.rewrite.error || "Rewrite generation is temporarily unavailable."}
+          </p>
+        )}
         <div className="mt-3">
           <RiskScore score={finalRisk} loading={analyzing} failed={finalRisk === null} />
         </div>
@@ -74,7 +88,7 @@ function AnalysisResults({ analysis, analyzing = false }) {
               <div key={key}>
                 <div className="mb-1 flex justify-between text-xs text-slate-400">
                   <span>{label}</span>
-                  <span>{value.toFixed(2)}</span>
+                  <span>{value.toFixed(4)}</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                   <div
@@ -97,9 +111,9 @@ function AnalysisResults({ analysis, analyzing = false }) {
                 <p className="font-medium">{item.term}</p>
                 <p className="text-slate-400">
                   {item.usage}
-                  {typeof item.confidence === "number" ? ` · ${item.confidence.toFixed(2)}` : ""}
+                  {typeof item.confidence === "number" ? ` · ${item.confidence.toFixed(4)}` : ""}
                 </p>
-                {item.meaning && <p className="mt-1 text-slate-200">{item.meaning}</p>}
+                {item.meaning && <p className="mt-1 text-slate-600">{item.meaning}</p>}
               </li>
             ))}
           </ul>
@@ -109,31 +123,31 @@ function AnalysisResults({ analysis, analyzing = false }) {
       <dl className="grid grid-cols-1 gap-3 text-sm">
         <div className="rounded-lg bg-[#f6f7fb] p-3">
           <dt className="text-slate-400">Personalized risk (PACL)</dt>
-          <dd className="font-mono text-lg">{pacl === null ? "—" : pacl.toFixed(2)}</dd>
+          <dd className="font-mono text-lg">{pacl === null ? "—" : pacl.toFixed(4)}</dd>
         </div>
         <div className="rounded-lg bg-[#f6f7fb] p-3">
           <dt className="text-slate-400">Escalation feature</dt>
-          <dd className="font-mono text-lg">{escalationFeature === null ? "—" : escalationFeature.toFixed(2)}</dd>
+          <dd className="font-mono text-lg">{escalationFeature === null ? "—" : escalationFeature.toFixed(4)}</dd>
         </div>
         <div className="rounded-lg bg-[#f6f7fb] p-3">
           <dt className="text-slate-400">Escalation probability</dt>
-          <dd className="font-mono text-lg">{pEsc === null ? "—" : pEsc.toFixed(2)}</dd>
+          <dd className="font-mono text-lg">{pEsc === null ? "—" : pEsc.toFixed(4)}</dd>
         </div>
         {baseline && (
           <div className="rounded-lg bg-[#f6f7fb] p-3">
             <dt className="text-slate-400">Behavioral baseline (toxic)</dt>
-            <dd className="font-mono text-lg">{Number(baseline.toxic || 0).toFixed(2)}</dd>
+            <dd className="font-mono text-lg">{Number(baseline.toxic || 0).toFixed(4)}</dd>
           </div>
         )}
         {Array.isArray(delta) && (
           <div className="rounded-lg bg-[#f6f7fb] p-3">
             <dt className="text-slate-400">Delta vector</dt>
-            <dd className="font-mono text-xs">{delta.map((value) => Number(value).toFixed(2)).join(", ")}</dd>
+            <dd className="font-mono text-xs">{delta.map((value) => Number(value).toFixed(4)).join(", ")}</dd>
           </div>
         )}
         <div className="rounded-lg bg-[#f6f7fb] p-3">
           <dt className="text-slate-400">Final risk</dt>
-          <dd className="font-mono text-lg">{finalRisk === null ? "—" : finalRisk.toFixed(2)}</dd>
+          <dd className="font-mono text-lg">{finalRisk === null ? "—" : finalRisk.toFixed(4)}</dd>
         </div>
       </dl>
     </aside>

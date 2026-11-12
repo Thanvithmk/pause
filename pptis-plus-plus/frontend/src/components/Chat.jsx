@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import VoiceInput from "./VoiceInput";
 import AnalysisResults from "./AnalysisResults";
-import { useShellBand } from "./AppShell";
+import { deliveryConfirmed, visibleSentMessages } from "../utils/messageLifecycle";
 import { OPEN_CONVERSATION_KEY } from "./MessageHistory";
 import {
   analyzeText,
@@ -9,6 +9,7 @@ import {
   getConversation,
   getDelayedSendStatus,
   listConversations,
+  recordIntervention,
   sendMessage,
 } from "../services/api";
 import { formatClock } from "../utils/time";
@@ -45,10 +46,9 @@ function Chat({ user }) {
   const [warnHidden, setWarnHidden] = useState(false);
   const [activeExercise, setActiveExercise] = useState(null);
   const [copied, setCopied] = useState(false);
-  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState(null);
   const sendingRef = useRef(false);
   const analyzedTextRef = useRef("");
-  const { setBand } = useShellBand();
 
   function mapThread(thread) {
     return (thread.messages || []).map((item) => {
@@ -69,13 +69,53 @@ function Chat({ user }) {
     });
   }
 
-  async function loadThread(id) {
-    if (!id) {
-      setMessages([]);
+  function restorePending(thread) {
+    const pending = (thread.messages || []).filter((item) => {
+      const status = item.message?.send_status;
+      return status && status !== "sent" && status !== "cancelled";
+    });
+    const latest = pending[pending.length - 1];
+    if (!latest) {
       return;
     }
+    const stored = latest.message;
+    const risk = latest.decision || {};
+    const original = stored.original_text || "";
+    const suggestion = [...(latest.interventions || [])]
+      .reverse()
+      .map((item) => item.suggested_text)
+      .find((text) => typeof text === "string" && text.trim());
+    setText(original);
+    analyzedTextRef.current = original;
+    setAnalysis({
+      message_id: stored.message_id,
+      conversation_id: stored.conversation_id,
+      original_text: original,
+      decision: risk.decision,
+      final_risk: risk.final_risk,
+      risk_score: risk.final_risk,
+      send_status: stored.send_status,
+      can_send: risk.decision === "ALLOW",
+      allow_send_anyway: risk.decision === "WARN",
+      suggested_text: suggestion || null,
+      rewrite: suggestion
+        ? { suggested_text: suggestion, status: "ready", available: true }
+        : { suggested_text: null, status: "unavailable", available: false },
+    });
+    setFlowState(flowFromDecision(risk.decision));
+  }
+
+  async function loadThread(id, options = {}) {
+    if (!id) {
+      setMessages([]);
+      return null;
+    }
     const thread = await getConversation(id);
-    setMessages(mapThread(thread));
+    setMessages(mapThread(thread).filter((item) => item.sendStatus === "sent"));
+    if (options.restore) {
+      restorePending(thread);
+    }
+    return thread;
   }
 
   useEffect(() => {
@@ -95,7 +135,7 @@ function Chat({ user }) {
           return;
         }
         setConversationId(latest.conversation_id);
-        await loadThread(latest.conversation_id);
+        await loadThread(latest.conversation_id, { restore: true });
       } catch {
         /* keep empty until the user analyzes */
       }
@@ -115,7 +155,7 @@ function Chat({ user }) {
     setText("");
     analyzedTextRef.current = "";
     try {
-      await loadThread(nextId);
+      await loadThread(nextId, { restore: true });
     } catch {
       setError("Could not load that conversation.");
     }
@@ -164,16 +204,6 @@ function Chat({ user }) {
     };
   }, [flowState, analysis?.message_id]);
 
-  useEffect(() => {
-    const decision = analysis?.decision;
-    if (decision === "ALLOW" || decision === "WARN" || decision === "REWRITE" || decision === "DELAYED-SEND") {
-      setBand(decision);
-    } else {
-      setBand(null);
-    }
-    return () => setBand(null);
-  }, [analysis?.decision, setBand]);
-
   function pushMessage(role, body, extra = {}) {
     setMessages((current) => [
       ...current,
@@ -204,6 +234,9 @@ function Chat({ user }) {
 
   function handleTextChange(value) {
     setText(value);
+    if (flowState === FLOW.DELAYED_SEND) {
+      return;
+    }
     if (analyzedTextRef.current && value.trim() !== analyzedTextRef.current) {
       analyzedTextRef.current = "";
       setAnalysis(null);
@@ -221,35 +254,17 @@ function Chat({ user }) {
     }
     setFlowState(FLOW.ANALYZING);
     setError("");
-    const pendingId = `pending-${Date.now()}`;
-    pushMessage("user", sourceText, { source: "text", pending: true, loadingScore: true, id: pendingId });
     try {
       const result = await analyzeText(sourceText, conversationId);
-      const score = typeof result.risk_score === "number" ? result.risk_score : result.final_risk;
-      setMessages((current) =>
-        current.map((item) =>
-          item.id === pendingId || (item.pending && item.text === sourceText)
-            ? {
-                ...item,
-                pending: false,
-                loadingScore: false,
-                messageId: result.message_id,
-                decision: result.decision,
-                riskScore: typeof score === "number" ? score : null,
-                scoreFailed: typeof score !== "number",
-              }
-            : item
-        )
-      );
+      if (result?.send_status === "sent") {
+        setFlowState(FLOW.ERROR);
+        setError("Analysis returned a sent message. Sending was not authorized.");
+        return null;
+      }
       return applyAnalysis(result, sourceText);
     } catch (err) {
       setFlowState(FLOW.ERROR);
       setError(err.response?.data?.message || "Could not analyze text.");
-      setMessages((current) =>
-        current.map((item) =>
-          item.id === pendingId ? { ...item, pending: false, loadingScore: false, scoreFailed: true } : item
-        )
-      );
       return null;
     }
   }
@@ -280,15 +295,14 @@ function Chat({ user }) {
         text: current,
         userAction,
       });
+      if (!deliveryConfirmed(sent)) {
+        throw new Error("The server did not confirm delivery.");
+      }
+      await loadThread(payload.conversation_id || conversationId);
       setFlowState(FLOW.SENT);
-      setMessages((current) =>
-        current.map((item) =>
-          item.messageId === payload.message_id ? { ...item, sendStatus: "sent" } : item
-        )
-      );
       setText("");
       analyzedTextRef.current = "";
-      setAnalysis(payload);
+      setAnalysis(null);
       setTimeout(() => setFlowState(FLOW.IDLE), 400);
     } catch (err) {
       const message = err.response?.data?.message || "Could not send message.";
@@ -304,7 +318,19 @@ function Chat({ user }) {
   }
 
   async function handleSend() {
-    if (flowState === FLOW.DELAYED_SEND || flowState === FLOW.REWRITE_REQUIRED) {
+    if (flowState === FLOW.REWRITE_REQUIRED || (flowState === FLOW.DELAYED_SEND && remainingSeconds !== 0)) {
+      return;
+    }
+    if (flowState === FLOW.DELAYED_SEND) {
+      const result = await runAnalyze();
+      if (!result) {
+        return;
+      }
+      if (result.decision === "ALLOW") {
+        await runSend("send", result);
+      } else if (result.decision === "WARN") {
+        await runSend("send_anyway", result);
+      }
       return;
     }
     if (flowState === FLOW.WARNING) {
@@ -335,10 +361,12 @@ function Chat({ user }) {
     applyAnalysis(result, spoken);
   }
 
+  const delayStillRunning = flowState === FLOW.DELAYED_SEND && remainingSeconds !== 0;
+  const showSendButton = flowState !== FLOW.DELAYED_SEND || remainingSeconds === 0;
   const sendDisabled =
     flowState === FLOW.ANALYZING ||
     flowState === FLOW.SENDING ||
-    flowState === FLOW.DELAYED_SEND ||
+    delayStillRunning ||
     flowState === FLOW.REWRITE_REQUIRED ||
     !text.trim();
 
@@ -360,10 +388,39 @@ function Chat({ user }) {
     }
   }
 
-  function beginEdit() {
+  async function recordResponse(userResponse, outcome) {
+    if (!analysis?.message_id) {
+      return;
+    }
+    if (!["WARN", "REWRITE", "DELAYED-SEND"].includes(analysis.decision)) {
+      return;
+    }
+    try {
+      await recordIntervention({
+        messageId: analysis.message_id,
+        userResponse,
+        outcome,
+      });
+    } catch (err) {
+      setError(err.response?.data?.message || "Could not record that response.");
+    }
+  }
+
+  async function beginEdit() {
+    await recordResponse("edit");
     analyzedTextRef.current = "";
     setFlowState(FLOW.IDLE);
     setWarnHidden(true);
+  }
+
+  async function cancelIntervention() {
+    await recordResponse("cancel");
+    analyzedTextRef.current = "";
+    setText("");
+    setAnalysis(null);
+    setFlowState(FLOW.IDLE);
+    setWarnHidden(true);
+    setError("Send cancelled. The message was not delivered.");
   }
 
   return (
@@ -404,12 +461,10 @@ function Chat({ user }) {
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-4">
-        {messages.length === 0 && (
+        {messages.length === 0 && !analysis && (
           <p className="pt-8 text-center text-sm text-slate-400">Type a message to analyze it before it is sent.</p>
         )}
-        {messages
-          .filter((message) => message.role === "user")
-          .map((message) => (
+        {visibleSentMessages(messages).map((message) => (
             <div key={message.id} className="flex items-start gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-200 text-sm font-semibold text-slate-600">
                 {initial}
@@ -426,14 +481,21 @@ function Chat({ user }) {
             </div>
           ))}
 
+        {analysis && flowState !== FLOW.IDLE && flowState !== FLOW.SENT && flowState !== FLOW.ERROR && (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-600" data-status="not-sent">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Not sent · {analysis.decision || "pending"}</p>
+            <p className="mt-1">{analysis.original_text || text}</p>
+          </div>
+        )}
+
         {flowState === FLOW.WARNING && !warnHidden && (
           <div className="flex items-center justify-between rounded-2xl bg-[#fff6dd] px-4 py-3 text-sm text-[#c98409]">
             <p className="flex items-center gap-2">
               <span className="grid h-5 w-5 place-items-center rounded-full bg-[#f5b942] text-xs font-bold text-white">!</span>
               This message might be interpreted as negative.
             </p>
-            <button type="button" onClick={() => setWarnHidden(true)} aria-label="Dismiss warning" className="text-lg leading-none">
-              ×
+            <button type="button" onClick={cancelIntervention} className="text-sm font-semibold">
+              Cancel
             </button>
           </div>
         )}
@@ -444,7 +506,11 @@ function Chat({ user }) {
               <span aria-hidden="true">✨</span> Suggested Safer Message
             </p>
             <div className="mt-3 flex items-start justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
-              <p className="whitespace-pre-wrap">{suggested || "Edit the message into a more respectful version."}</p>
+              <p className="whitespace-pre-wrap">
+                {suggested ||
+                  analysis?.rewrite?.error ||
+                  "Rewrite generation is temporarily unavailable. The original message cannot be sent. Edit it and analyze again."}
+              </p>
               {suggested && (
                 <button type="button" onClick={copySuggestion} aria-label="Copy suggestion" className="text-slate-400">
                   {copied ? "Copied" : (
@@ -480,7 +546,10 @@ function Chat({ user }) {
               </button>
               <button
                 type="button"
-                onClick={() => setError("Sending the original message is not permitted. Use the suggestion or edit it.")}
+                onClick={async () => {
+                  await recordResponse("cancel", "negative");
+                  setError("Sending the original message is not permitted. Edit it and analyze again.");
+                }}
                 className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600"
               >
                 Keep Original
@@ -489,7 +558,7 @@ function Chat({ user }) {
           </div>
         )}
 
-        {flowState === FLOW.DELAYED_SEND && (
+        {flowState === FLOW.DELAYED_SEND && remainingSeconds > 0 && (
           <div className="rounded-3xl border border-[#e4defe] bg-[#f7f5ff] p-5">
             <p className="flex items-center gap-2 font-semibold text-[#5b4dff]">
               <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -501,7 +570,10 @@ function Chat({ user }) {
             <p className="mt-2 text-sm text-slate-500">
               This message has been placed on a short pause because its current risk is high.
             </p>
-            <p className="mx-auto mt-4 w-fit rounded-full bg-[#ece7ff] px-8 py-3 font-mono text-3xl font-semibold tracking-wider text-[#5b4dff]">
+            <p className="mt-3 rounded-2xl bg-white px-4 py-3 text-sm text-slate-700" data-status="not-sent">
+              {analysis?.original_text || text}
+            </p>
+            <p className="mx-auto mt-4 w-fit rounded-full bg-[#ece7ff] px-8 py-3 font-mono text-3xl font-semibold tracking-wider text-[#5b4dff]" data-countdown={clock}>
               {clock}
             </p>
             <p className="mt-4 text-center text-sm text-slate-500">Try a short calming exercise below.</p>
@@ -527,11 +599,6 @@ function Chat({ user }) {
             {activeExercise && (
               <p className="mt-3 text-sm text-slate-500">
                 {exercises.find((item) => item.exercise === activeExercise)?.instructions}
-              </p>
-            )}
-            {remainingSeconds === 0 && (
-              <p className="mt-3 text-center text-xs text-slate-500">
-                The pause is over. Edit the message and analyze it again before sending.
               </p>
             )}
           </div>
@@ -574,16 +641,24 @@ function Chat({ user }) {
               <span aria-hidden="true">⚠</span> WARN
             </span>
           )}
-          <button
-            type="submit"
-            disabled={sendDisabled}
-            className="inline-flex h-12 items-center gap-2 rounded-full bg-[#5b4dff] px-5 text-sm font-semibold text-white disabled:bg-slate-300"
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-              <path d="M3 11.5 21 3l-7.2 18-2.3-7.2L3 11.5Z" />
-            </svg>
-            {flowState === FLOW.ANALYZING ? "Analyzing…" : flowState === FLOW.SENDING ? "Sending…" : "Send"}
-          </button>
+          {showSendButton && (
+            <button
+              type="submit"
+              disabled={sendDisabled}
+              className="inline-flex h-12 items-center gap-2 rounded-full bg-[#5b4dff] px-5 text-sm font-semibold text-white disabled:bg-slate-300"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                <path d="M3 11.5 21 3l-7.2 18-2.3-7.2L3 11.5Z" />
+              </svg>
+              {flowState === FLOW.ANALYZING
+                ? "Analyzing…"
+                : flowState === FLOW.SENDING
+                  ? "Sending…"
+                  : flowState === FLOW.WARNING
+                    ? "Send anyway"
+                    : "Send"}
+            </button>
+          )}
         </div>
         {error && <p className="mt-2 px-2 text-sm text-rose-500">{error}</p>}
       </form>

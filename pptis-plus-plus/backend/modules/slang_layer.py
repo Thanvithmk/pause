@@ -610,6 +610,8 @@ class SlangInterpreter:
                 stem = key[: -len(suffix)]
                 stems.append(stem)
                 stems.append(stem + "e")
+        if key.endswith("ies") and len(key) - 3 >= 3:
+            stems.append(key[:-3] + "y")
         return any(stem in words for stem in stems)
 
     def _unknown_tokens(self, text, candidates):

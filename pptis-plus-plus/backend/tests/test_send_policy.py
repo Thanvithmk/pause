@@ -130,6 +130,68 @@ class SendPolicyTests(unittest.TestCase):
         status, payload = self._send(analysis)
         self.assertEqual(status, 422, payload)
 
+    def test_analysis_does_not_send(self):
+        status, analysis = self._analyze("I like you")
+        self.assertEqual(status, 200, analysis)
+        self.assertNotEqual(analysis["send_status"], "sent")
+        self.assertFalse(analysis["sent"] if "sent" in analysis else False)
+        session = get_session()
+        from modules.database import Message
+
+        row = session.get(Message, analysis["message_id"])
+        self.assertNotEqual(row.send_status, "sent")
+        close_session()
+        thread = self.client.get(
+            f"/api/conversation/{analysis['conversation_id']}",
+            headers=self.headers,
+        ).get_json()
+        stored = thread["messages"][-1]["message"]["send_status"]
+        self.assertNotEqual(stored, "sent")
+
+    def test_warn_stays_unsent_until_confirmation_and_cancel_blocks_send(self):
+        status, analysis = self._analyze("Thanks for the notes.")
+        self.assertEqual(status, 200, analysis)
+        self._force_decision(analysis["message_id"], "WARN", 0.4)
+        session = get_session()
+        from modules.database import Message
+
+        row = session.get(Message, analysis["message_id"])
+        row.send_status = "pending_warning"
+        session.commit()
+        close_session()
+        status, payload = self._send(analysis)
+        self.assertEqual(status, 409, payload)
+        session = get_session()
+        row = session.get(Message, analysis["message_id"])
+        self.assertEqual(row.send_status, "pending_warning")
+        close_session()
+        cancelled = self.client.post(
+            "/api/intervention-response",
+            json={"message_id": analysis["message_id"], "user_response": "cancel"},
+            headers=self.headers,
+        )
+        self.assertEqual(cancelled.status_code, 200, cancelled.get_json())
+        status, payload = self._send(analysis, user_action="send_anyway")
+        self.assertEqual(status, 409, payload)
+        session = get_session()
+        row = session.get(Message, analysis["message_id"])
+        self.assertEqual(row.send_status, "cancelled")
+        close_session()
+
+    def test_delayed_status_cannot_be_sent(self):
+        status, analysis = self._analyze("I like you")
+        self.assertEqual(status, 200, analysis)
+        session = get_session()
+        from modules.database import Message
+
+        row = session.get(Message, analysis["message_id"])
+        row.send_status = "delayed"
+        session.commit()
+        close_session()
+        status, payload = self._send(analysis)
+        self.assertEqual(status, 409, payload)
+        self.assertNotEqual(payload.get("send_status"), "sent")
+
 
 if __name__ == "__main__":
     unittest.main()

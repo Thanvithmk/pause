@@ -82,7 +82,7 @@ class MockedGroqRewriteTests(unittest.TestCase):
         from modules.rewrite_engine import RewriteEngine
 
         engine = RewriteEngine.__new__(RewriteEngine)
-        engine.groq_model = "llama-3.1-8b-instant"
+        engine.groq_model = "openai/gpt-oss-120b"
         engine.inference = "mocked"
         engine.groq_client = MagicMock()
         engine._groq_key = "test-key"
@@ -102,12 +102,12 @@ class MockedGroqRewriteTests(unittest.TestCase):
         engine = self._engine()
 
         def explode(prompt):
-            raise RewriteServiceError("rewrite: Groq request failed for llama-3.1-8b-instant")
+            raise RewriteServiceError("rewrite: Groq request failed for openai/gpt-oss-120b")
 
         engine._complete = explode
         with self.assertRaises(RewriteServiceError) as caught:
             engine.generate_candidate_rewrite("You are awful.", [])
-        self.assertIn("llama-3.1-8b-instant", str(caught.exception))
+        self.assertIn("openai/gpt-oss-120b", str(caught.exception))
         self.assertNotIn("template", str(caught.exception).lower())
 
 

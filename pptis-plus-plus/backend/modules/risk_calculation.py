@@ -393,7 +393,7 @@ class RiskCalculator:
     def calculate_delta_x(self, current_toxicity_vector, previous_toxicity_vector):
         current = self._as_toxicity_vector(current_toxicity_vector, "X_t")
         previous = self._as_toxicity_vector(previous_toxicity_vector, "X_t-1")
-        delta = [round(curr - prev, 10) for curr, prev in zip(current, previous)]
+        delta = [curr - prev for curr, prev in zip(current, previous)]
         logger.info("CEL ΔX=%s", delta)
         return delta
 

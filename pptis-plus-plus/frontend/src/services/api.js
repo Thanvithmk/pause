@@ -62,6 +62,15 @@ export async function analyzeVoice(audioBlob, filename = "recording.webm", conve
   return data;
 }
 
+export async function recordIntervention({ messageId, userResponse, outcome }) {
+  const { data } = await api.post("/api/intervention-response", {
+    message_id: messageId,
+    user_response: userResponse,
+    outcome,
+  });
+  return data;
+}
+
 export async function sendMessage({ messageId, conversationId, text, userAction = "send" }) {
   const { data } = await api.post("/api/send", {
     message_id: messageId,

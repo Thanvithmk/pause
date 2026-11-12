@@ -203,6 +203,9 @@ class PrimarySlangPathTests(unittest.TestCase):
         self.assertIsNone(detection["confidence"])
         self.assertIsNone(detection["meaning"])
         self.assertNotIn("toxic", detection)
+        enemies = self.interpreter.interpret("I have enemies.")
+        self.assertFalse(any(item.get("usage") == "unknown" for item in enemies["detections"]))
+        self.assertEqual(enemies["enriched_text_with_context"], "I have enemies.")
 
     def test_failure_modes_do_not_invent_probabilities(self):
         from modules.slang_layer import SlangModelError
@@ -274,7 +277,7 @@ class PrimarySlangPathTests(unittest.TestCase):
         import inspect
 
         source = inspect.getsource(run_analysis_pipeline)
-        self.assertLess(source.index("slang.interpret"), source.index("toxicity.analyze"))
+        self.assertLess(source.index("slang.interpret"), source.index("toxicity.inspect"))
 
     def test_score_independent_set_without_refitting(self):
         classified = []

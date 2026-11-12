@@ -1,7 +1,7 @@
 """Integration checks against the live PostgreSQL database pptis.
 
 Inference for slang, toxicity, and Whisper is actual.
-The Groq call is a real HTTP request to llama-3.1-8b-instant.
+The Groq call is a real HTTP request to openai/gpt-oss-120b.
 This file is not part of the SQLite unit suite.
 """
 
@@ -179,14 +179,38 @@ class PostgresApplicationTests(unittest.TestCase):
         status, body = self._analyze("You never listen to what I'm saying.")
         self.assertEqual(status, 200, body)
         self.assertEqual(body["decision"], "WARN")
-        self.assertGreaterEqual(body["final_risk"], 0.30)
-        self.assertLess(body["final_risk"], 0.55)
+        self.assertEqual(body["send_status"], "pending_warning")
+        self.assertNotEqual(body["send_status"], "sent")
+        self.assertEqual(body["mathematical_decision"], "ALLOW")
+        self.assertLess(body["final_risk"], 0.30)
+        self.assertEqual(body["guardrail"], "safety_pattern:WARN")
+        self.assertAlmostEqual(body["toxicity"]["toxic"], body["model_toxicity"]["toxic"])
         blocked, error = self._send(body)
         self.assertEqual(blocked, 409, error)
         edited, edit_error = self._send(body, text="A different message")
         self.assertEqual(edited, 409, edit_error)
         allowed, sent = self._send(body, user_action="send_anyway")
         self.assertEqual(allowed, 200, sent)
+
+    def test_cancelled_warning_cannot_be_sent(self):
+        status, body = self._analyze("You never listen to what I'm saying.")
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["send_status"], "pending_warning")
+        cancelled = self.client.post(
+            "/api/intervention-response",
+            json={"message_id": body["message_id"], "user_response": "cancel"},
+            headers=self.headers_a,
+        )
+        self.assertEqual(cancelled.status_code, 200, cancelled.get_json())
+        self.assertFalse(cancelled.get_json()["sent"])
+        blocked, error = self._send(body, user_action="send_anyway")
+        self.assertEqual(blocked, 409, error)
+        session = get_session()
+        try:
+            row = session.get(Message, body["message_id"])
+            self.assertEqual(row.send_status, "cancelled")
+        finally:
+            close_session()
 
     def test_contextual_slang_uses_the_trained_head(self):
         status, body = self._analyze("Bro, that movie was fire")
@@ -213,10 +237,40 @@ class PostgresApplicationTests(unittest.TestCase):
         finally:
             close_session()
 
+    def test_negated_sentence_uses_model_scores_for_risk(self):
+        status, body = self._analyze("I am angry, but I do not want to hurt anyone.")
+        self.assertEqual(status, 200, body)
+        self.assertTrue(body["safety"]["negated"])
+        self.assertEqual(body["toxicity"], body["model_toxicity"])
+        tb = body["toxicity"]["toxic"]
+        self.assertGreater(tb, 0.0)
+        pacl = min(1.0, max(0.0, tb + 0.5 * tb))
+        pesc = 1.0 / (1.0 + math.exp(-pacl))
+        risk = 0.5 * pacl + 0.5 * pesc
+        self.assertAlmostEqual(body["final_risk"], risk, places=9)
+        expected_status = {
+            "ALLOW": "approved",
+            "WARN": "pending_warning",
+            "REWRITE": "pending_rewrite",
+            "DELAYED-SEND": "delayed",
+        }[body["mathematical_decision"]]
+        self.assertEqual(body["decision"], body["mathematical_decision"])
+        self.assertEqual(body["send_status"], expected_status)
+        session = get_session()
+        try:
+            row = session.query(ToxicityResult).filter(ToxicityResult.message_id == body["message_id"]).one()
+            self.assertAlmostEqual(row.toxic, tb, places=9)
+            risk_row = session.query(RiskResult).filter(RiskResult.message_id == body["message_id"]).one()
+            self.assertAlmostEqual(risk_row.final_risk, risk, places=9)
+            self.assertNotEqual(session.get(Message, body["message_id"]).send_status, "sent")
+        finally:
+            close_session()
+
     def test_delayed_send_persists_and_blocks_sending(self):
         status, body = self._analyze("I will hurt you after class.")
         self.assertEqual(status, 200, body)
         self.assertEqual(body["decision"], "DELAYED-SEND")
+        self.assertEqual(body["send_status"], "delayed")
         self.assertFalse(body["can_send"])
         session = get_session()
         try:
@@ -256,7 +310,6 @@ class PostgresApplicationTests(unittest.TestCase):
             os.unlink(handle.name)
         self.assertEqual(transcriber.model_name, "base.en")
         self.assertTrue(transcript["success"], transcript)
-        audio.seek(0)
         response = self.client.post(
             "/api/analyze-voice",
             data={"audio": (audio, "tone.wav")},
@@ -264,17 +317,8 @@ class PostgresApplicationTests(unittest.TestCase):
             content_type="multipart/form-data",
         )
         body = response.get_json()
-        if response.status_code == 503:
-            self.assertIn(REQUIRED_GROQ_MODEL, body["message"])
-            self.assertNotIn("analysis_complete", body)
-            return
-        self.assertIn(response.status_code, (200, 400), body)
-        if response.status_code == 400:
-            self.assertEqual(body["message"], "No speech detected")
-        else:
-            self.assertEqual(body["input_type"], "voice")
-            self.assertTrue(body["analysis_complete"])
-            self.assertTrue(body.get("transcription", {}).get("success"))
+        self.assertEqual(response.status_code, 503, body)
+        self.assertIn("currently deferred", body["message"])
 
 
 class RealGroqRewriteTests(unittest.TestCase):
@@ -308,16 +352,20 @@ class RealGroqRewriteTests(unittest.TestCase):
         self.assertTrue(suggestion)
         self.assertNotEqual(suggestion.strip().lower(), "this whole plan is trash. let's start over.")
 
-    def test_rewrite_decision_does_not_return_a_successful_analysis(self):
+    def test_rewrite_decision_stays_blocked_when_groq_is_unavailable(self):
         response = self.client.post(
             "/api/analyze",
             json={"text": "This whole plan is trash. Let's start over."},
             headers=self.headers,
         )
         body = response.get_json()
-        self.assertEqual(response.status_code, 503, body)
-        self.assertIn(REQUIRED_GROQ_MODEL, body["message"])
-        self.assertNotIn("analysis_complete", body)
+        self.assertEqual(response.status_code, 200, body)
+        self.assertTrue(body["analysis_complete"])
+        self.assertEqual(body["decision"], "REWRITE")
+        self.assertFalse(body["can_send"])
+        self.assertIsNone(body["suggested_text"])
+        self.assertEqual(body["rewrite"]["status"], "unavailable")
+        self.assertIn(REQUIRED_GROQ_MODEL, body["rewrite"]["error"])
         session = get_session()
         try:
             message = (

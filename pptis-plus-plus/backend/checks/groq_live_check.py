@@ -1,6 +1,6 @@
 """Live Groq call. This file is not part of the default unit suite.
 
-Inference: actual HTTP request to llama-3.1-8b-instant.
+Inference: actual HTTP request to openai/gpt-oss-120b.
 A failed response is printed and exits non-zero. No substitute model is called.
 """
 

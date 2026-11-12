@@ -46,7 +46,7 @@ Copy `backend/.env.example` to `backend/.env` and edit values.
 | `CORS_ORIGINS` | Allowed frontend origins | `http://localhost:3000` |
 | `WHISPER_MODEL` | Faster-Whisper model | `base.en` only |
 | `GROQ_API_KEY` | Groq rewrite key | required |
-| `GROQ_MODEL` | Groq model | `llama-3.1-8b-instant` only |
+| `GROQ_MODEL` | Groq model | `openai/gpt-oss-120b` only |
 | `LOGISTIC_B`, `LOGISTIC_W_E`, `LOGISTIC_W_P` | Trained `P_esc` weights | `0`, `1`, `1` |
 
 Fixed (not env-tuned): `PACL_LAMBDA = 0.5`, `FINAL_RISK_ALPHA = 0.5`, decision thresholds `0.30 / 0.55 / 0.80`.
@@ -59,7 +59,7 @@ export FLASK_ENV=development
 python app.py
 ```
 
-Listens on `0.0.0.0:5000` by default (`HOST`, `PORT`). Startup loads `xlm-roberta-base`, `backend/models/slang_literal_head.pt` (threshold 0.58), `unitary/toxic-bert`, and Whisper `base.en`. If one of those cannot load, the process exits. Groq is checked for a configured key and the model name `llama-3.1-8b-instant`. A failed Groq call returns an error and does not invent a rewrite.
+Listens on `0.0.0.0:5000` by default (`HOST`, `PORT`). Startup loads `xlm-roberta-base`, `backend/models/slang_literal_head.pt` (threshold 0.58), `unitary/toxic-bert`, and Whisper `base.en`. If one of those cannot load, the process exits. Groq is checked for a configured key and the model name `openai/gpt-oss-120b`. A failed Groq call returns an error and does not invent a rewrite.
 
 ## API endpoints
 

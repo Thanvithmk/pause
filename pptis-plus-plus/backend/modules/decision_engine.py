@@ -47,7 +47,7 @@ class DecisionEngine:
             self.delayed_send_duration,
         )
 
-    def make_decision(self, final_risk_score, toxicity_vector=None, safety_flags=None):
+    def make_decision(self, final_risk_score, toxicity_vector=None, safety_flags=None, safety_label=None):
         score = self._validate_risk(final_risk_score)
         if score < self.T_allow:
             decision = "ALLOW"
@@ -60,6 +60,9 @@ class DecisionEngine:
 
         decision, guardrail = self._apply_safety_guardrail(
             decision, toxicity_vector, safety_flags
+        )
+        decision, guardrail = self._apply_safety_label(
+            decision, guardrail, safety_label, safety_flags
         )
 
         confidence = self._confidence(score, decision)
@@ -280,6 +283,20 @@ class DecisionEngine:
         if rank[escalated] > rank[decision]:
             return escalated, reason
         return decision, None
+
+    @staticmethod
+    def _apply_safety_label(decision, guardrail, safety_label, safety_flags):
+        """A regex safety label may raise the intervention. It does not change R."""
+        flags = safety_flags or {}
+        if flags.get("quoted") or flags.get("negated") or flags.get("playful_idiom"):
+            return decision, guardrail
+        if safety_label not in DECISION_ORDER:
+            return decision, guardrail
+        rank = {name: index for index, name in enumerate(DECISION_ORDER)}
+        if rank[safety_label] > rank[decision]:
+            reason = f"safety_pattern:{safety_label}"
+            return safety_label, reason if not guardrail else f"{guardrail}+{reason}"
+        return decision, guardrail
 
     @staticmethod
     def _validate_risk(value):

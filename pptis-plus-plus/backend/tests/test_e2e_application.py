@@ -102,7 +102,14 @@ class EndToEndApplicationTests(unittest.TestCase):
         self.assertEqual(status, 200, analysis)
         self.assertTrue(analysis["analysis_complete"])
         self.assertEqual(analysis["inference"]["toxicity"], "actual")
-        self.assertEqual(analysis["decision"], _band(analysis["final_risk"]))
+        self.assertEqual(analysis["mathematical_decision"], _band(analysis["final_risk"]))
+        if analysis.get("guardrail"):
+            self.assertGreater(
+                ("ALLOW", "WARN", "REWRITE", "DELAYED-SEND").index(analysis["decision"]),
+                ("ALLOW", "WARN", "REWRITE", "DELAYED-SEND").index(analysis["mathematical_decision"]),
+            )
+        else:
+            self.assertEqual(analysis["decision"], _band(analysis["final_risk"]))
         if analysis["decision"] == "WARN":
             blocked, body = self._send(analysis)
             self.assertEqual(blocked, 409, body)
@@ -114,7 +121,10 @@ class EndToEndApplicationTests(unittest.TestCase):
         session = get_session()
         feedback = session.query(Feedback).filter(Feedback.message_id == analysis["message_id"]).first()
         close_session()
-        self.assertIsNotNone(feedback)
+        if analysis["decision"] == "ALLOW":
+            self.assertIsNone(feedback)
+        else:
+            self.assertIsNotNone(feedback)
 
         _, rewrite = self._analyze("You're a joke in this group.")
         self.assertEqual(rewrite["decision"], "REWRITE")
@@ -174,7 +184,8 @@ class EndToEndApplicationTests(unittest.TestCase):
         self.assertIn("slang_statistics", payload)
         self.assertIn("behavior_profile", payload)
         allow = next(item for item in payload["message_outcomes"] if item["name"] == "allow")
-        self.assertGreaterEqual(allow["value"], 1)
+        self.assertGreaterEqual(len(payload["recent_activity"]), 1)
+        self.assertIn("send_status", payload["recent_activity"][0])
 
     def test_logout_revokes_token(self):
         logout = self.client.post("/api/auth/logout", headers=self.headers_a)
@@ -182,9 +193,11 @@ class EndToEndApplicationTests(unittest.TestCase):
         after = self.client.get("/api/user/profile", headers=self.headers_a)
         self.assertEqual(after.status_code, 401)
 
-    def test_voice_without_audio_fails(self):
+    def test_voice_transcription_is_deferred(self):
         response = self.client.post("/api/analyze-voice", headers=self.headers_a)
-        self.assertEqual(response.status_code, 400)
+        body = response.get_json()
+        self.assertEqual(response.status_code, 503, body)
+        self.assertIn("currently deferred", body["message"])
 
     def test_single_conversation_demonstration(self):
         created = self.client.post("/api/conversations", headers=self.headers_a)

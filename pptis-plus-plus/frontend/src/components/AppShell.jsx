@@ -1,33 +1,4 @@
-import { createContext, useContext, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-
-const BandContext = createContext({
-  band: null,
-  setBand: () => {},
-});
-
-export function useShellBand() {
-  return useContext(BandContext);
-}
-
-const BANDS = {
-  ALLOW: {
-    label: "1. ALLOW (Risk: 0.00 – 0.30)",
-    className: "bg-[#e5f8ec] text-[#1c9a4a]",
-  },
-  WARN: {
-    label: "2. WARN (Risk: 0.30 – 0.55)",
-    className: "bg-[#fff3d6] text-[#e39a12]",
-  },
-  REWRITE: {
-    label: "3. REWRITE (Risk: 0.55 – 0.80)",
-    className: "bg-[#ffe8ea] text-[#ef4d5c]",
-  },
-  "DELAYED-SEND": {
-    label: "4. DELAYED-SEND (Risk: 0.80 – 1.00)",
-    className: "bg-[#eee9ff] text-[#6a5ae0]",
-  },
-};
 
 const NAV = [
   { to: "/chat", label: "Chat", icon: "chat" },
@@ -65,14 +36,6 @@ function Icon({ name }) {
       </svg>
     );
   }
-  if (name === "bell") {
-    return (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M6 16h12l-1.2-2.1a6 6 0 0 1-.8-3V9a4 4 0 1 0-8 0v1.9a6 6 0 0 1-.8 3L6 16Z" strokeLinejoin="round" />
-        <path d="M10 16a2 2 0 0 0 4 0" strokeLinecap="round" />
-      </svg>
-    );
-  }
   return (
     <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <circle cx="12" cy="12" r="3" />
@@ -82,18 +45,8 @@ function Icon({ name }) {
 }
 
 export function ShellProvider({ user, onLogout, children }) {
-  const [band, setBand] = useState(null);
-  const value = useMemo(() => ({ band, setBand }), [band]);
-  const tone = BANDS[band];
-
   return (
-    <BandContext.Provider value={value}>
       <div className="flex h-screen flex-col overflow-hidden bg-[#e7edf8] px-3 py-5 text-slate-800 md:px-8 md:py-8">
-        {tone && (
-          <div className={`mx-auto mb-4 w-full max-w-6xl shrink-0 rounded-2xl px-5 py-3 text-center text-sm font-semibold tracking-wide ${tone.className}`}>
-            {tone.label}
-          </div>
-        )}
         <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_20px_60px_rgba(76,70,140,0.12)]">
           <header className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
             <div className="flex items-center gap-3">
@@ -109,9 +62,6 @@ export function ShellProvider({ user, onLogout, children }) {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-full text-slate-400" aria-hidden="true">
-                <Icon name="bell" />
-              </span>
               <button
                 type="button"
                 onClick={onLogout}
@@ -161,6 +111,5 @@ export function ShellProvider({ user, onLogout, children }) {
           </nav>
         </div>
       </div>
-    </BandContext.Provider>
   );
 }

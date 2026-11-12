@@ -1,6 +1,4 @@
 import logging
-import os
-import tempfile
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, current_app, g, jsonify, request
@@ -19,7 +17,7 @@ from modules.database import (
     get_session,
     utcnow,
 )
-from modules.rewrite_engine import RewriteServiceError
+from modules.rewrite_engine import REQUIRED_GROQ_MODEL, RewriteServiceError
 from modules.send_gateway import SendError, send_analyzed_message
 from modules.slang_layer import SlangModelError
 from modules.speech_to_text import VoiceModelError
@@ -57,6 +55,9 @@ class PipelineServices:
 
     def reset(self):
         self._cache.clear()
+        from modules.behavior_profile import clear_profile_cache
+
+        clear_profile_cache()
 
     def _load(self, name, factory):
         if name not in self._cache:
@@ -219,52 +220,8 @@ def analyze():
 @api_bp.route("/analyze-voice", methods=["POST"])
 @require_auth
 def analyze_voice():
-    audio = request.files.get("audio")
-    if audio is None or not audio.filename:
-        raise ApiError("audio file is required", 400)
-    conversation_id = request.form.get("conversation_id") or (request.get_json(silent=True) or {}).get(
-        "conversation_id"
-    )
-    transcriber = services.transcriber
-    if transcriber is None:
-        raise ApiError("Speech-to-text is unavailable", 500)
-
-    suffix = os.path.splitext(audio.filename)[1] or ".webm"
-    handle = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    try:
-        audio.save(handle.name)
-        handle.close()
-        logger.info("Transcribing voice user_id=%s file=%s", g.current_user_id, audio.filename)
-        try:
-            result = transcriber.transcribe_audio_file(handle.name, language="en")
-        except VoiceModelError as exc:
-            raise ApiError(str(exc), 503) from exc
-    finally:
-        try:
-            os.unlink(handle.name)
-        except OSError:
-            pass
-
-    if not result.get("success"):
-        raise ApiError(result.get("error") or "Transcription failed", 400)
-    text = (result.get("text") or "").strip()
-    if not text:
-        raise ApiError("No speech detected", 400)
-
-    try:
-        payload = run_analysis_pipeline(
-            user_id=g.current_user_id,
-            text=text,
-            input_type="voice",
-            conversation_id=int(conversation_id) if conversation_id else None,
-            transcription_confidence=result.get("transcription_confidence", 1.0),
-            transcription=result,
-        )
-    except (ToxicityAnalysisError, SlangModelError, RewriteServiceError, VoiceModelError) as exc:
-        raise ApiError(str(exc) or "Analysis failed", 503) from exc
-    payload["transcription"] = result
-    payload["transcription_confidence"] = payload.get("transcription_confidence")
-    return jsonify(payload), 200
+    logger.info("Voice transcription requested user_id=%s status=deferred", g.current_user_id)
+    raise ApiError("Voice transcription is currently deferred.", 503)
 
 
 @api_bp.route("/send", methods=["POST"])
@@ -407,9 +364,9 @@ def dashboard():
         recent = (
             session.query(RiskResult, Message)
             .join(Message, RiskResult.message_id == Message.message_id)
-            .filter(Message.user_id == user_id)
+            .filter(Message.user_id == user_id, RiskResult.timestamp >= cutoff)
             .order_by(RiskResult.timestamp.desc())
-            .limit(20)
+            .limit(50)
             .all()
         )
         trends = (
@@ -438,6 +395,14 @@ def dashboard():
 
     learning = services.learning
     insights = learning.generate_user_insights(user_id) if learning else []
+    escalation_history = [
+        {
+            "timestamp": risk.timestamp.isoformat() if risk.timestamp else None,
+            "trigger_topic": (message.original_text or "").strip()[:160],
+        }
+        for risk, message in recent
+        if risk.decision in ("WARN", "REWRITE", "DELAYED-SEND")
+    ]
     warn = int(decision_counts.get("WARN", 0))
     rewrite = int(decision_counts.get("REWRITE", 0))
     delayed = int(decision_counts.get("DELAYED-SEND", 0))
@@ -472,28 +437,98 @@ def dashboard():
         "decision_breakdown": [
             {"name": key, "value": int(value)} for key, value in decision_counts.items()
         ],
-        "escalation_history": [
-            {
-                "decision": risk.decision,
-                "timestamp": risk.timestamp.isoformat() if risk.timestamp else None,
-                "final_risk": risk.final_risk,
-                "message_id": message.message_id,
-            }
-            for risk, message in recent
-            if risk.decision in ("WARN", "REWRITE", "DELAYED-SEND")
-        ],
+        "escalation_history": escalation_history,
         "recent_activity": [
             {
                 "decision": risk.decision,
                 "timestamp": risk.timestamp.isoformat() if risk.timestamp else None,
                 "final_risk": risk.final_risk,
                 "text": (message.original_text or "")[:160],
+                "send_status": message.send_status,
             }
             for risk, message in recent
         ],
         "insights": insights,
+        "intervention_effectiveness": _effectiveness_view(user_id),
     }
     return jsonify(payload)
+
+
+@api_bp.route("/intervention-response", methods=["POST"])
+@require_auth
+def intervention_response():
+    body = request.get_json(silent=True) or {}
+    try:
+        message_id = int(body.get("message_id"))
+    except (TypeError, ValueError) as exc:
+        raise ApiError("message_id is required", 400) from exc
+    requested = (body.get("user_response") or "").strip().lower()
+    mapped = {
+        "cancel": ("rejected", "neutral", "cancel"),
+        "rejected": ("rejected", "neutral", "cancel"),
+        "edit": ("edited", "neutral", "edit"),
+        "edited": ("edited", "neutral", "edit"),
+        "accepted": ("accepted", "neutral", "accepted"),
+    }
+    if requested not in mapped:
+        raise ApiError("user_response must be cancel, edit, or accepted", 400)
+    user_response, outcome, user_action = mapped[requested]
+    if body.get("outcome") in ("positive", "neutral", "negative"):
+        outcome = body["outcome"]
+
+    session = get_session()
+    try:
+        message = session.get(Message, message_id)
+        if message is None:
+            raise ApiError("Message not found", 404)
+        if message.user_id != g.current_user_id:
+            raise ApiError("You do not own this message", 403)
+        if message.send_status == "sent":
+            raise ApiError("Message already sent", 409)
+        risk = (
+            session.query(RiskResult)
+            .filter(RiskResult.message_id == message.message_id)
+            .order_by(RiskResult.timestamp.desc(), RiskResult.risk_id.desc())
+            .first()
+        )
+        if risk is None or risk.decision not in ("WARN", "REWRITE", "DELAYED-SEND"):
+            raise ApiError("This message has no intervention to record", 422)
+        decision = risk.decision
+        profile_count = message.profile_updated
+    finally:
+        close_session()
+
+    learning = services.learning
+    if learning is None:
+        raise ApiError("Feedback learning is unavailable", 500)
+    recorded = learning.record_intervention_outcome(message_id, decision, user_response, outcome)
+    session = get_session()
+    try:
+        log = (
+            session.query(InterventionLog)
+            .filter(InterventionLog.message_id == message_id, InterventionLog.action == decision)
+            .order_by(InterventionLog.id.desc())
+            .first()
+        )
+        if log is not None:
+            log.user_action = user_action
+        if user_action == "cancel":
+            message = session.get(Message, message_id)
+            if message is not None and message.send_status != "sent":
+                message.send_status = "cancelled"
+        session.commit()
+    finally:
+        close_session()
+    return jsonify({
+        "recorded": True,
+        "sent": False,
+        "message_id": message_id,
+        "decision": decision,
+        "user_response": user_response,
+        "outcome": outcome,
+        "profile_updated": bool(profile_count),
+        "effectiveness": recorded.get("effectiveness"),
+    }), 200
 
 
 @api_bp.route("/conversations", methods=["POST"])
@@ -595,16 +630,30 @@ def run_analysis_pipeline(
         raise ApiError("Analysis services are unavailable", 500)
 
     conversation = _get_or_create_conversation(user_id, conversation_id)
-    prior_context = _recent_message_texts(conversation.conversation_id)
+    prior_messages = _recent_message_texts(conversation.conversation_id)
+    prior_context = "\n".join(prior_messages)
     preprocessed = preprocessor.preprocess(text)
     cleaned = preprocessed["cleaned_text"]
     slang_result = slang.interpret(cleaned, user_id=user_id)
     enriched = slang_result.get("enriched_text_with_context") or cleaned
-    toxicity_scores = toxicity.analyze(enriched, context=prior_context)
+    toxicity_detail = toxicity.inspect(
+        enriched,
+        context=prior_context,
+        context_messages=prior_messages,
+    )
+    model_scores = dict(toxicity_detail["model"])
+    # Safety flags can raise the decision later. They do not replace Xt.
+    toxicity_scores = model_scores
     vector = [float(toxicity_scores[label]) for label in CEL_LABELS]
+    detections = slang_result.get("detections") or []
 
+    profile = profiles.get_or_create_profile(user_id)
+    baseline = profiles.get_profile(user_id)
     session = get_session()
     try:
+        locked_conversation = _lock_row(
+            session, Conversation, Conversation.conversation_id == conversation.conversation_id
+        )
         message = Message(
             conversation_id=conversation.conversation_id,
             user_id=user_id,
@@ -616,14 +665,15 @@ def run_analysis_pipeline(
             transcription_confidence=transcription_confidence,
             send_status="draft",
             analyzed_at=utcnow(),
+            profile_updated=False,
+            slang_detections=detections,
         )
         session.add(message)
-        conversation.updated_at = datetime.now(timezone.utc)
-        session.commit()
-        session.refresh(message)
+        locked_conversation.updated_at = datetime.now(timezone.utc)
+        session.flush()
         message_id = message.message_id
         previous = _previous_toxicity(session, user_id, conversation.conversation_id, message_id)
-        tox_row = ToxicityResult(
+        session.add(ToxicityResult(
             message_id=message_id,
             toxic=vector[0],
             threat=vector[1],
@@ -631,32 +681,36 @@ def run_analysis_pipeline(
             severe_toxic=vector[3],
             obscene=vector[4],
             identity_hate=vector[5],
+        ))
+        if previous is None:
+            delta = [0.0] * 6
+            cel = 0.0
+        else:
+            delta = risk_calc.calculate_delta_x(vector, previous)
+            cel = risk_calc.calculate_cel(delta)
+        pacl = risk_calc.calculate_pacl(vector[0], baseline[0])
+        p_esc = risk_calc.calculate_escalation_probability(cel, pacl)
+        final_risk = risk_calc.calculate_final_risk(pacl, p_esc)
+        safety_flags = {
+            "quoted": toxicity_detail.get("quoted"),
+            "negated": toxicity_detail.get("negated"),
+            "playful_idiom": toxicity_detail.get("playful_idiom"),
+        }
+        mathematical_decision = risk_calc.get_risk_category(final_risk)[0]
+        decision = decisions.make_decision(
+            final_risk,
+            toxicity_vector=toxicity_scores,
+            safety_flags=safety_flags,
+            safety_label=toxicity_detail.get("safety_label"),
         )
-        session.add(tox_row)
-        session.commit()
-    except Exception:
-        session.rollback()
-        logger.exception("Failed to store message/toxicity")
-        raise ApiError("Could not store analysis", 500)
-    finally:
-        close_session()
-
-    profile = profiles.get_or_create_profile(user_id)
-    baseline = profiles.get_profile(user_id)
-    pacl = risk_calc.calculate_pacl(vector[0], baseline[0])
-    if previous is None:
-        delta = [0.0] * 6
-        cel = 0.0
-    else:
-        delta = risk_calc.calculate_delta_x(vector, previous)
-        cel = risk_calc.calculate_cel(delta)
-    p_esc = risk_calc.calculate_escalation_probability(cel, pacl)
-    final_risk = risk_calc.calculate_final_risk(pacl, p_esc)
-    decision = decisions.make_decision(final_risk, toxicity_vector=toxicity_scores)
-
-    session = get_session()
-    try:
-        risk_row = RiskResult(
+        send_status = {
+            "ALLOW": "approved",
+            "WARN": "pending_warning",
+            "REWRITE": "pending_rewrite",
+            "DELAYED-SEND": "delayed",
+        }[decision["decision"]]
+        message.send_status = send_status
+        session.add(RiskResult(
             message_id=message_id,
             pacl=pacl,
             delta_vector_6d=delta,
@@ -664,13 +718,19 @@ def run_analysis_pipeline(
             escalation_probability=p_esc,
             final_risk=final_risk,
             decision=decision["decision"],
-        )
-        session.add(risk_row)
+            previous_vector_6d=previous,
+            mathematical_decision=mathematical_decision,
+            guardrail_reason=decision.get("guardrail"),
+            model_toxicity=model_scores,
+        ))
         session.commit()
+    except ApiError:
+        session.rollback()
+        raise
     except Exception:
         session.rollback()
-        logger.exception("Failed to store risk result")
-        raise ApiError("Could not store risk result", 500)
+        logger.exception("Failed to store analysis")
+        raise ApiError("Could not store analysis", 500)
     finally:
         close_session()
 
@@ -681,20 +741,9 @@ def run_analysis_pipeline(
         conversation.conversation_id,
         text,
     )
-    rewrite_payload = None
+    rewrite_payload = _rewrite_payload(decision["decision"], conversation.conversation_id, message_id, user_id, text)
     delay_payload = None
     if decision["decision"] == "REWRITE":
-        rewriter = services.rewriter
-        if rewriter is None:
-            raise ApiError("rewrite: Groq rewrite service is unavailable", 503)
-        rewrite_payload = rewriter.rewrite(
-            text,
-            conversation_id=conversation.conversation_id,
-            message_id=message_id,
-            user_id=user_id,
-        )
-        if rewrite_payload.get("inference") != "actual" or rewrite_payload.get("model") != "llama-3.1-8b-instant":
-            raise ApiError("rewrite: Groq rewrite did not use llama-3.1-8b-instant", 503)
         action["suggested_text"] = rewrite_payload.get("suggested_text")
         action["allow_send_original"] = False
     if decision["decision"] == "DELAYED-SEND" and services.delayed:
@@ -714,35 +763,49 @@ def run_analysis_pipeline(
             session,
             message_id=message_id,
             action=decision["decision"],
-            suggested_text=(rewrite_payload or {}).get("suggested_text"),
-            context_ids=[item.get("term") for item in slang.detect_candidates(cleaned)],
+            suggested_text=rewrite_payload.get("suggested_text"),
+            context_ids=[item.get("term") for item in detections],
             delay_seconds=(delay_payload or {}).get("countdown_seconds"),
+            user_action="rewrite_unavailable" if rewrite_payload.get("status") == "unavailable" else None,
         )
     except Exception:
-        logger.exception("Failed to store intervention log")
+        logger.exception("Failed to store intervention log message_id=%s", message_id)
+        raise ApiError("Could not store intervention log", 500)
     finally:
         close_session()
 
     logger.info(
-        "Analysis complete user_id=%s message_id=%s decision=%s R=%.4f",
+        "Analysis complete user_id=%s message_id=%s decision=%s mathematical=%s R=%.4f guardrail=%s",
         user_id,
         message_id,
         decision["decision"],
+        mathematical_decision,
         final_risk,
+        decision.get("guardrail"),
     )
     return {
         "message_id": message_id,
         "conversation_id": conversation.conversation_id,
         "original_text": text,
+        "context_messages": prior_messages,
         "processed_text": cleaned,
         "enriched_text": enriched,
         "input_type": input_type,
         "transcription_confidence": transcription_confidence,
         "preprocessed": preprocessed,
-        "slang": slang_result.get("detections") or [],
+        "slang": detections,
         "toxicity": toxicity_scores,
+        "model_toxicity": model_scores,
+        "safety": {
+            "label": toxicity_detail.get("safety_label"),
+            "quoted": safety_flags["quoted"],
+            "negated": safety_flags["negated"],
+            "playful_idiom": safety_flags["playful_idiom"],
+        },
+        "toxicity_truncated": bool(toxicity_detail.get("truncated")),
         "behavioral_baseline": _baseline_view(profile),
         "profile": profile,
+        "previous_vector": previous,
         "pacl": pacl,
         "delta_vector": delta,
         "delta_vector_6d": delta,
@@ -750,7 +813,9 @@ def run_analysis_pipeline(
         "escalation_probability": p_esc,
         "final_risk": final_risk,
         "risk_score": final_risk,
+        "mathematical_decision": mathematical_decision,
         "decision": decision["decision"],
+        "guardrail": decision.get("guardrail"),
         "confidence": decision.get("confidence"),
         "color_for_ui": decision.get("color_for_ui"),
         "description": decision.get("description"),
@@ -760,16 +825,14 @@ def run_analysis_pipeline(
         "allow_send_original": False,
         "allow_send_anyway": decision["decision"] == "WARN",
         "can_send": decision["decision"] == "ALLOW",
-        "send_status": "draft",
-        "suggested_text": (rewrite_payload or {}).get("suggested_text") or action.get(
-            "suggested_text"
-        ),
+        "send_status": send_status,
+        "suggested_text": rewrite_payload.get("suggested_text"),
         "warning_message": action.get("warning_message"),
         "analysis_complete": True,
         "inference": {
             "slang": "actual",
             "toxicity": "actual",
-            "rewrite": (rewrite_payload or {}).get("inference"),
+            "rewrite": rewrite_payload.get("inference"),
         },
     }
 
@@ -797,7 +860,7 @@ def _get_or_create_conversation(user_id, conversation_id):
         close_session()
 
 
-def _recent_message_texts(conversation_id, limit=4):
+def _recent_message_texts(conversation_id, limit=5):
     session = get_session()
     try:
         rows = (
@@ -812,32 +875,107 @@ def _recent_message_texts(conversation_id, limit=4):
             piece = row.current_text or row.original_text or ""
             if piece.strip():
                 texts.append(piece.strip())
-        return "\n".join(texts)
+        return texts[-limit:]
     except Exception:
         logger.exception("Could not load prior messages conversation_id=%s", conversation_id)
-        return ""
+        return []
     finally:
         close_session()
 
 
 def _previous_toxicity(session, user_id, conversation_id, message_id):
-    previous = (
-        session.query(Message)
+    row = (
+        session.query(ToxicityResult)
+        .join(Message, ToxicityResult.message_id == Message.message_id)
         .filter(
             Message.user_id == user_id,
             Message.conversation_id == conversation_id,
-            Message.message_id != message_id,
+            Message.message_id < message_id,
         )
-        .order_by(Message.timestamp.desc(), Message.message_id.desc())
+        .order_by(Message.message_id.desc())
         .first()
-    )
-    if previous is None:
-        return None
-    row = (
-        session.query(ToxicityResult)
-        .filter(ToxicityResult.message_id == previous.message_id)
-        .one_or_none()
     )
     if row is None:
         return None
     return [float(getattr(row, label)) for label in CEL_LABELS]
+
+
+def _lock_row(session, model, criterion):
+    query = session.query(model).filter(criterion)
+    bind = session.get_bind()
+    if bind is not None and bind.dialect.name == "postgresql":
+        query = query.with_for_update()
+    return query.one()
+
+
+def _rewrite_payload(decision_name, conversation_id, message_id, user_id, text):
+    if decision_name != "REWRITE":
+        return {
+            "suggested_text": None,
+            "available": False,
+            "status": "not_required",
+            "inference": None,
+            "model": None,
+            "error": None,
+            "allow_send_original": False,
+        }
+    rewriter = services.rewriter
+    try:
+        if rewriter is None:
+            raise RewriteServiceError("rewrite: Groq rewrite service is unavailable")
+        produced = rewriter.rewrite(
+            text,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            user_id=user_id,
+        )
+    except RewriteServiceError as exc:
+        logger.warning("Rewrite unavailable message_id=%s error=%s", message_id, exc)
+        return {
+            "suggested_text": None,
+            "available": False,
+            "status": "unavailable",
+            "inference": "unavailable",
+            "model": REQUIRED_GROQ_MODEL,
+            "error": str(exc),
+            "allow_send_original": False,
+        }
+    if produced.get("inference") != "actual" or produced.get("model") != REQUIRED_GROQ_MODEL:
+        return {
+            "suggested_text": None,
+            "available": False,
+            "status": "unavailable",
+            "inference": "unavailable",
+            "model": REQUIRED_GROQ_MODEL,
+            "error": f"rewrite: Groq rewrite did not use {REQUIRED_GROQ_MODEL}",
+            "allow_send_original": False,
+        }
+    suggestion = produced.get("suggested_text")
+    return {
+        **produced,
+        "suggested_text": suggestion,
+        "available": bool(suggestion),
+        "status": "ready" if suggestion else "edit_only",
+        "error": None,
+        "allow_send_original": False,
+    }
+
+
+def _effectiveness_view(user_id):
+    learning = services.learning
+    if learning is None:
+        return None
+    stats = learning.update_ril_statistics(user_id)
+    session = get_session()
+    try:
+        from modules.ril import InterventionEffectiveness
+
+        record = (
+            session.query(InterventionEffectiveness)
+            .filter(InterventionEffectiveness.user_id == user_id)
+            .one_or_none()
+        )
+        counts = record.to_dict() if record is not None else {}
+    finally:
+        close_session()
+    return {"scores": stats, "counts": counts}

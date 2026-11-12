@@ -80,14 +80,28 @@ class BehavioralLearning:
         reward = REWARD_MAP[(user_response, outcome)]
         session = get_session()
         try:
-            feedback = Feedback.create(
-                session,
-                message_id=message_id,
-                intervention=intervention_type,
-                user_response=user_response,
-                outcome=outcome,
-                reward=reward,
+            feedback = (
+                session.query(Feedback)
+                .filter(
+                    Feedback.message_id == message_id,
+                    Feedback.intervention == intervention_type,
+                )
+                .order_by(Feedback.id.desc())
+                .first()
             )
+            if feedback is None:
+                feedback = Feedback(
+                    message_id=message_id,
+                    intervention=intervention_type,
+                    user_response=user_response,
+                    outcome=outcome,
+                    reward=reward,
+                )
+                session.add(feedback)
+            else:
+                feedback.user_response = user_response
+                feedback.outcome = outcome
+                feedback.reward = reward
             log = (
                 session.query(InterventionLog)
                 .filter(
@@ -99,7 +113,8 @@ class BehavioralLearning:
             )
             if log is not None:
                 log.user_response = user_response
-                session.commit()
+            session.commit()
+            session.refresh(feedback)
 
             message = session.query(Message).filter(Message.message_id == message_id).one_or_none()
             user_id = message.user_id if message is not None else None
@@ -236,9 +251,6 @@ class BehavioralLearning:
                 insights.append(f"Your average toxicity increased {percent:.0f}% this month")
             else:
                 insights.append("Your average toxicity held steady this month")
-        elif this_month["messages"] > 0:
-            insights.append("You are using safer and more respectful language overall")
-
         if last_month["warnings"] > 0:
             delta = (this_month["warnings"] - last_month["warnings"]) / last_month["warnings"]
             percent = abs(delta) * 100
@@ -246,11 +258,14 @@ class BehavioralLearning:
                 insights.append(f"Warnings reduced by {percent:.0f}% compared to last month")
             else:
                 insights.append(f"Warnings increased by {percent:.0f}% compared to last month")
-        elif this_month["warnings"] == 0 and this_month["messages"] > 0:
-            insights.append("No warnings this month — keep that pace")
+        elif this_month["warnings"] == 0 and this_month["messages"] > 0 and last_month["messages"] > 0:
+            insights.append("No warnings this month")
 
-        if this_month["avg_toxicity"] <= last_month["avg_toxicity"] or last_month["messages"] == 0:
-            insights.append("You are using safer and more respectful language overall")
+        if (
+            last_month["messages"] > 0
+            and this_month["avg_toxicity"] < last_month["avg_toxicity"]
+        ):
+            insights.append("Average toxicity is lower than the previous month")
 
         preferences = self.get_intervention_preferences(user_id)
         if preferences["preferred"]:
@@ -258,8 +273,6 @@ class BehavioralLearning:
                 f"{preferences['preferred']} is currently the most effective intervention for you"
             )
 
-        if not insights:
-            insights.append("Keep chatting — insights appear after more intervention feedback")
         logger.info("Generated %s insights for user_id=%s", len(insights), user_id)
         return insights
 

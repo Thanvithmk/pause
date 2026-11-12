@@ -54,14 +54,19 @@ def send_analyzed_message(
         if conversation.user_id != user_id:
             raise SendError("You do not own this conversation", 403)
 
-        message = session.get(Message, int(message_id))
+        message_query = session.query(Message).filter(Message.message_id == int(message_id))
+        if session.get_bind() is not None and session.get_bind().dialect.name == "postgresql":
+            message_query = message_query.with_for_update()
+        message = message_query.one_or_none()
         if message is None:
             raise SendError("Message not found", 404)
         if message.user_id != user_id or message.conversation_id != conversation.conversation_id:
             raise SendError("You do not own this message", 403)
 
-        if getattr(message, "send_status", "draft") == "sent":
+        if message.send_status == "sent":
             raise SendError("Message already sent", 409)
+        if message.send_status in ("cancelled", "failed"):
+            raise SendError("This message is not authorized to send.", 409)
 
         analyzed_text = _normalize(message.analyzed_text or message.original_text)
         if analyzed_text != requested_text:
@@ -77,6 +82,10 @@ def send_analyzed_message(
             raise SendError("Message has not been analyzed", 422)
 
         decision = risk.decision
+        if message.send_status == "delayed" and decision != DECISION_DELAYED:
+            raise SendError("This message is not authorized to send.", 409)
+        if message.send_status == "pending_rewrite" and decision != DECISION_REWRITE:
+            raise SendError("This message is not authorized to send.", 409)
         lock = DelayedSendManager._blocking_lock(session, user_id, conversation.conversation_id)
         released_delay_id = None
         if lock is not None:
@@ -137,22 +146,26 @@ def send_analyzed_message(
                 "obscene": tox_row.obscene,
                 "identity_hate": tox_row.identity_hate,
             }
+        profile_data = None
+        if tox_vector is not None and not message.profile_updated:
+            from modules.behavior_profile import BehaviorProfileManager
+
+            profile_data = BehaviorProfileManager().apply_vector(session, user_id, tox_vector)
+            message.profile_updated = True
         session.commit()
         session.refresh(message)
+        if profile_data is not None:
+            from modules.behavior_profile import BehaviorProfileManager
+
+            BehaviorProfileManager().remember(user_id, profile_data)
         logger.info(
-            "Sent message_id=%s user_id=%s decision=%s action=%s",
+            "Sent message_id=%s user_id=%s decision=%s action=%s profile_updated=%s",
             message.message_id,
             user_id,
             decision,
             action,
+            message.profile_updated,
         )
-        if tox_vector is not None:
-            try:
-                from modules.behavior_profile import BehaviorProfileManager
-
-                BehaviorProfileManager().update_profile(user_id, tox_vector)
-            except Exception:
-                logger.exception("Behavior profile update failed after send message_id=%s", message.message_id)
         if decision == DECISION_WARN:
             try:
                 from modules.ril import BehavioralLearning

@@ -7,7 +7,7 @@ The application always loads the Master Plan models. It does not switch to a sma
 | Contextual slang | Frozen `xlm-roberta-base` and `backend/models/slang_literal_head.pt`, threshold 0.58 |
 | Toxicity | `unitary/toxic-bert`, six scores |
 | Voice | Faster-Whisper `base.en` |
-| Rewrite | Groq `llama-3.1-8b-instant` |
+| Rewrite | Groq `openai/gpt-oss-120b` |
 | Database | PostgreSQL |
 
 Startup loads the local models, runs one inference for each, and exits if a model or the trained slang head cannot load. A missing Groq key or a different `GROQ_MODEL` also stops startup. If Groq fails during a rewrite, the API returns an error for that component and does not invent a suggestion or allow the message to send on that failed analysis.

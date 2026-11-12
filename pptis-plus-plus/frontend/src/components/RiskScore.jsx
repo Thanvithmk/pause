@@ -7,7 +7,7 @@ function RiskScore({ score, loading = false, failed = false, className = "" }) {
   }
   return (
     <p className={`text-xs font-mono text-slate-300 ${className}`}>
-      Risk Score: {Number(score).toFixed(2)} / 1.00
+      Risk Score: {Number(score).toFixed(4)} / 1.00
     </p>
   );
 }

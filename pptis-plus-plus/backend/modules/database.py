@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -85,6 +86,14 @@ def init_db(database_uri=None, create_tables=True):
         Base.metadata.create_all(bind=engine)
         ensure_optional_columns()
 
+    try:
+        from modules.behavior_profile import clear_profile_cache
+
+        clear_profile_cache()
+    except Exception:
+        logger = __import__("logging").getLogger(__name__)
+        logger.debug("Behavior profile cache was not cleared", exc_info=True)
+
     return SessionLocal
 
 
@@ -94,6 +103,8 @@ def ensure_optional_columns():
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
     timestamp_type = "TIMESTAMP" if engine.dialect.name == "postgresql" else "DATETIME"
+    json_type = "JSON"
+    flag_type = "BOOLEAN DEFAULT FALSE" if engine.dialect.name == "postgresql" else "INTEGER DEFAULT 0"
     desired = {
         "messages": {
             "current_text": "TEXT",
@@ -101,12 +112,20 @@ def ensure_optional_columns():
             "send_status": "VARCHAR(32) DEFAULT 'draft'",
             "sent_at": timestamp_type,
             "analyzed_at": timestamp_type,
+            "profile_updated": flag_type,
+            "slang_detections": json_type,
         },
         "delayed_send_locks": {
             "conversation_id": "INTEGER",
         },
         "intervention_logs": {
             "user_action": "VARCHAR(64)",
+        },
+        "risk_results": {
+            "previous_vector_6d": json_type,
+            "mathematical_decision": "VARCHAR(32)",
+            "guardrail_reason": "VARCHAR(64)",
+            "model_toxicity": json_type,
         },
     }
     with engine.begin() as connection:
@@ -279,6 +298,8 @@ class Message(CRUDMixin, Base):
     send_status = Column(String(32), nullable=False, default="draft")
     sent_at = Column(DateTime(timezone=True))
     analyzed_at = Column(DateTime(timezone=True))
+    profile_updated = Column(Boolean, nullable=False, default=False)
+    slang_detections = Column(JSON)
     timestamp = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
     conversation = relationship("Conversation", back_populates="messages")
@@ -407,6 +428,10 @@ class RiskResult(CRUDMixin, Base):
     escalation_probability = Column(Float, nullable=False)
     final_risk = Column(Float, nullable=False)
     decision = Column(decision_action_enum, nullable=False)
+    previous_vector_6d = Column(JSON)
+    mathematical_decision = Column(String(32))
+    guardrail_reason = Column(String(64))
+    model_toxicity = Column(JSON)
     timestamp = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
     message = relationship("Message", back_populates="risk_result")
@@ -416,6 +441,22 @@ class RiskResult(CRUDMixin, Base):
         if not isinstance(value, (list, tuple)) or len(value) != 6:
             raise ValueError("delta_vector_6d must be a 6-dimensional array")
         return list(value)
+
+    @validates("previous_vector_6d")
+    def validate_previous_vector(self, key, value):
+        if value is None:
+            return value
+        if not isinstance(value, (list, tuple)) or len(value) != 6:
+            raise ValueError("previous_vector_6d must be a 6-dimensional array")
+        return list(value)
+
+    @validates("mathematical_decision")
+    def validate_mathematical_decision(self, key, value):
+        if value is None:
+            return value
+        if value not in DECISION_ACTIONS:
+            raise ValueError(f"mathematical_decision must be one of {DECISION_ACTIONS}")
+        return value
 
     @validates("decision")
     def validate_decision(self, key, value):

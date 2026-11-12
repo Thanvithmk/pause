@@ -116,3 +116,75 @@ class RiskCalculatorPACLTests(unittest.TestCase):
         self.assertEqual(category, "DELAYED-SEND")
         self.assertTrue(color.startswith("#"))
         self.assertIn("delay", description.lower())
+
+    def test_exact_decision_boundaries(self):
+        from modules.decision_engine import DecisionEngine
+
+        with patch("modules.decision_engine.RiskCalculator", return_value=self.calculator):
+            engine = DecisionEngine()
+        expected = (
+            (0.299999, "ALLOW"),
+            (0.30, "WARN"),
+            (0.300001, "WARN"),
+            (0.549999, "WARN"),
+            (0.55, "REWRITE"),
+            (0.550001, "REWRITE"),
+            (0.799999, "REWRITE"),
+            (0.80, "DELAYED-SEND"),
+            (0.800001, "DELAYED-SEND"),
+        )
+        zeros = {
+            "toxic": 0.0,
+            "threat": 0.0,
+            "insult": 0.0,
+            "severe_toxic": 0.0,
+            "obscene": 0.0,
+            "identity_hate": 0.0,
+        }
+        for score, decision in expected:
+            result = engine.make_decision(score, toxicity_vector=zeros)
+            self.assertEqual(result["decision"], decision, score)
+            self.assertEqual(result["risk_score"], score)
+            self.assertIsNone(result["guardrail"])
+
+    def test_guardrail_raises_decision_without_changing_risk(self):
+        from modules.decision_engine import DecisionEngine
+
+        with patch("modules.decision_engine.RiskCalculator", return_value=self.calculator):
+            engine = DecisionEngine()
+        vector = {
+            "toxic": 0.2,
+            "threat": 0.8,
+            "insult": 0.0,
+            "severe_toxic": 0.0,
+            "obscene": 0.0,
+            "identity_hate": 0.0,
+        }
+        result = engine.make_decision(0.40, toxicity_vector=vector)
+        self.assertEqual(result["decision"], "DELAYED-SEND")
+        self.assertEqual(result["risk_score"], 0.40)
+        self.assertEqual(result["guardrail"], "threat_vector_guardrail")
+        quoted = engine.make_decision(0.40, toxicity_vector=vector, safety_flags={"quoted": True})
+        self.assertEqual(quoted["decision"], "WARN")
+        self.assertEqual(quoted["risk_score"], 0.40)
+        self.assertIsNone(quoted["guardrail"])
+
+    def test_conversation_delta_uses_immediate_previous_vector(self):
+        first = [0.10, 0.00, 0.00, 0.00, 0.00, 0.00]
+        second = [0.40, 0.10, 0.20, 0.00, 0.00, 0.00]
+        third = [0.20, 0.00, 0.05, 0.00, 0.00, 0.00]
+        delta_second = self.calculator.calculate_delta_x(second, first)
+        delta_third = self.calculator.calculate_delta_x(third, second)
+        self.assertEqual(delta_second, [second[i] - first[i] for i in range(6)])
+        self.assertEqual(delta_third, [third[i] - second[i] for i in range(6)])
+        self.assertGreater(self.calculator.calculate_cel(delta_second), 0)
+        self.assertLess(self.calculator.calculate_cel(delta_third), 0)
+
+    def test_first_message_escalation_is_zero_and_scores_stay_in_range(self):
+        pacl = self.calculator.calculate_pacl(0.2, 0.0)
+        probability = self.calculator.calculate_escalation_probability(0.0, pacl)
+        risk = self.calculator.calculate_final_risk(pacl, probability)
+        self.assertGreaterEqual(pacl, 0.0)
+        self.assertLessEqual(probability, 1.0)
+        self.assertLessEqual(risk, 1.0)
+        self.assertAlmostEqual(risk, 0.5 * pacl + 0.5 * probability)
