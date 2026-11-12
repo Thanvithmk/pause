@@ -148,17 +148,6 @@ REWRITE adds `rewrite.suggested_text` (no send-original). DELAYED-SEND adds `del
 
 **400** missing text, **401** no/invalid token, **403** conversation not owned, **404** conversation missing, **500** model/storage failure.
 
-### POST `/api/analyze-voice`
-
-**Auth required.** Multipart form:
-
-- `audio` (file, required)
-- `conversation_id` (optional)
-
-Transcribes with Faster-Whisper (`base.en`), then the same pipeline as `/api/analyze`. Extra fields: `transcription`, `transcription_confidence`.
-
-**400** if `audio` missing, transcription fails, or no speech.
-
 ---
 
 ## User and dashboard

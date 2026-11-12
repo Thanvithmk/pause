@@ -398,12 +398,6 @@ class MessageLifecycleTests(unittest.TestCase):
         self.assertEqual(current["context_messages"], earlier[-5:])
         self.assertNotIn(earlier[0], current["context_messages"])
 
-    def test_voice_endpoint_reports_transcription_deferred(self):
-        response = self.client.post("/api/analyze-voice", headers=self.headers)
-        body = response.get_json()
-        self.assertEqual(response.status_code, 503, body)
-        self.assertIn("currently deferred", body["message"])
-
     def test_dashboard_effectiveness_comes_from_stored_feedback(self):
         status, body = self._analyze("You never listen to what I'm saying.")
         self.assertEqual(body["decision"], "WARN")

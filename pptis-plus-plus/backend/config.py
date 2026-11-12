@@ -52,7 +52,6 @@ class Config:
 
     PACL_LAMBDA = 0.5
     FINAL_RISK_ALPHA = 0.5
-    WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base.en")
 
     THRESHOLD_ALLOW = 0.30
     THRESHOLD_WARN = 0.55

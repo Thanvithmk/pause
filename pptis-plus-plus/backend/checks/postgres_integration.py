@@ -1,18 +1,15 @@
 """Integration checks against the live PostgreSQL database pptis.
 
-Inference for slang, toxicity, and Whisper is actual.
+Inference for slang and toxicity is actual.
 The Groq call is a real HTTP request to openai/gpt-oss-120b.
 This file is not part of the SQLite unit suite.
 """
 
-import io
 import math
 import os
-import struct
 import sys
 import time
 import unittest
-import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -40,22 +37,6 @@ USER_A = f"audita{SUFFIX}"
 USER_B = f"auditb{SUFFIX}"
 EMAIL_A = f"{USER_A}@example.com"
 EMAIL_B = f"{USER_B}@example.com"
-
-
-def _tone_wav():
-    rate = 16000
-    frames = []
-    for index in range(rate):
-        sample = int(8000 * math.sin(2 * math.pi * 220 * index / rate))
-        frames.append(struct.pack("<h", sample))
-    handle = io.BytesIO()
-    with wave.open(handle, "w") as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(rate)
-        wav.writeframes(b"".join(frames))
-    handle.seek(0)
-    return handle
 
 
 class PostgresApplicationTests(unittest.TestCase):
@@ -296,30 +277,6 @@ class PostgresApplicationTests(unittest.TestCase):
         self.assertEqual([item["message_id"] for item in context], message_ids[-6:-1])
         self.assertEqual(len(context), 5)
 
-    def test_voice_transcription_uses_base_en(self):
-        from modules.speech_to_text import VoiceTranscriber
-
-        audio = _tone_wav()
-        handle = __import__("tempfile").NamedTemporaryFile(delete=False, suffix=".wav")
-        handle.write(audio.getvalue())
-        handle.close()
-        try:
-            transcriber = VoiceTranscriber("base.en")
-            transcript = transcriber.transcribe_audio_file(handle.name, language="en")
-        finally:
-            os.unlink(handle.name)
-        self.assertEqual(transcriber.model_name, "base.en")
-        self.assertTrue(transcript["success"], transcript)
-        response = self.client.post(
-            "/api/analyze-voice",
-            data={"audio": (audio, "tone.wav")},
-            headers=self.headers_a,
-            content_type="multipart/form-data",
-        )
-        body = response.get_json()
-        self.assertEqual(response.status_code, 503, body)
-        self.assertIn("currently deferred", body["message"])
-
 
 class RealGroqRewriteTests(unittest.TestCase):
     """A real request to the configured Groq model. No substitute model is called."""
@@ -409,7 +366,7 @@ class HealthStatusTests(unittest.TestCase):
         self.assertFalse(body["rewrite"]["available"])
         self.assertEqual(body["slang"]["inference"], "actual")
         self.assertEqual(body["toxicity"]["inference"], "actual")
-        self.assertEqual(body["voice"]["inference"], "actual")
+        self.assertNotIn("voice", body)
 
 
 if __name__ == "__main__":

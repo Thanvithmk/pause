@@ -6,7 +6,6 @@ The application always loads the Master Plan models. It does not switch to a sma
 | --- | --- |
 | Contextual slang | Frozen `xlm-roberta-base` and `backend/models/slang_literal_head.pt`, threshold 0.58 |
 | Toxicity | `unitary/toxic-bert`, six scores |
-| Voice | Faster-Whisper `base.en` |
 | Rewrite | Groq `openai/gpt-oss-120b` |
 | Database | PostgreSQL |
 
@@ -20,4 +19,4 @@ PYTHONPATH=. python -m unittest discover -s tests -p 'test_*.py' -q
 PYTHONPATH=. python checks/groq_live_check.py
 ```
 
-The unit suite runs the real slang, toxicity, and Whisper models. End-to-end rewrite calls use a mocked Groq response. `checks/groq_live_check.py` is the live API call.
+The unit suite runs the real slang and toxicity models. End-to-end rewrite calls use a mocked Groq response. `checks/groq_live_check.py` is the live API call.

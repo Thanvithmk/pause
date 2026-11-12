@@ -1,33 +1,14 @@
 """Load the mandatory local models and refuse to serve if one of them fails."""
 
 import logging
-import math
 import os
-import struct
-import tempfile
-import wave
 
 logger = logging.getLogger(__name__)
-
-
-def _tone_wav(path):
-    rate = 16000
-    seconds = 1
-    frames = []
-    for index in range(rate * seconds):
-        sample = int(8000 * math.sin(2 * math.pi * 220 * index / rate))
-        frames.append(struct.pack("<h", sample))
-    with wave.open(path, "w") as handle:
-        handle.setnchannels(1)
-        handle.setsampwidth(2)
-        handle.setframerate(rate)
-        handle.writeframes(b"".join(frames))
 
 
 def verify_primary_models():
     from modules.rewrite_engine import REQUIRED_GROQ_MODEL, RewriteServiceError, _setting
     from modules.slang_layer import REQUIRED_ENCODER, REQUIRED_THRESHOLD, SlangInterpreter, SlangModelError
-    from modules.speech_to_text import REQUIRED_MODEL, VoiceModelError, VoiceTranscriber
     from modules.toxicity_model import PRIMARY_MODEL, TOXICITY_LABELS, ToxicityAnalysisError, ToxicityAnalyzer
 
     import torch
@@ -66,26 +47,6 @@ def verify_primary_models():
         "model": PRIMARY_MODEL,
         "device": str(toxicity.device),
         "labels": list(TOXICITY_LABELS),
-    }
-
-    voice = VoiceTranscriber(REQUIRED_MODEL)
-    handle = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-    handle.close()
-    try:
-        _tone_wav(handle.name)
-        transcript = voice.transcribe_audio_file(handle.name, language="en")
-    finally:
-        try:
-            os.unlink(handle.name)
-        except OSError:
-            pass
-    if not transcript.get("success"):
-        raise VoiceModelError(transcript.get("error") or "voice transcription failed")
-    info = voice.get_model_info()
-    report["voice"] = {
-        "inference": "actual",
-        "model": info["model_name"],
-        "device": info["device"],
     }
 
     if not _setting("GROQ_API_KEY"):

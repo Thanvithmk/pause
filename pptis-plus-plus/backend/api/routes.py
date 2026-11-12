@@ -20,7 +20,6 @@ from modules.database import (
 from modules.rewrite_engine import REQUIRED_GROQ_MODEL, RewriteServiceError
 from modules.send_gateway import SendError, send_analyzed_message
 from modules.slang_layer import SlangModelError
-from modules.speech_to_text import VoiceModelError
 from modules.toxicity_model import ToxicityAnalysisError
 
 logger = logging.getLogger(__name__)
@@ -118,12 +117,6 @@ class PipelineServices:
         return self._load("delayed", DelayedSendManager)
 
     @property
-    def transcriber(self):
-        from modules.speech_to_text import VoiceTranscriber
-
-        return self._load("transcriber", VoiceTranscriber)
-
-    @property
     def learning(self):
         from modules.ril import BehavioralLearning
 
@@ -182,7 +175,7 @@ def health():
         return jsonify({"ready": False, "production_ready": False, "error": "primary models were not verified"}), 503
     local_ready = all(
         (report.get(name) or {}).get("inference") == "actual"
-        for name in ("slang", "toxicity", "voice")
+        for name in ("slang", "toxicity")
     )
     return jsonify({
         "ready": local_ready,
@@ -197,10 +190,8 @@ def analyze():
     body = request.get_json(silent=True) or {}
     text = (body.get("text") or body.get("original_text") or "").strip()
     input_type = (body.get("input_type") or "text").lower()
-    if input_type not in ("text", "voice"):
-        raise ApiError("input_type must be 'text' or 'voice'", 400)
-    if input_type == "voice" and not text:
-        raise ApiError("Voice analysis requires transcribed text or /api/analyze-voice", 400)
+    if input_type != "text":
+        raise ApiError("input_type must be 'text'", 400)
     if not text:
         raise ApiError("text is required", 400)
     logger.info("Analyze text user_id=%s chars=%s", g.current_user_id, len(text))
@@ -208,20 +199,11 @@ def analyze():
         payload = run_analysis_pipeline(
             user_id=g.current_user_id,
             text=text,
-            input_type=input_type,
             conversation_id=body.get("conversation_id"),
-            transcription_confidence=body.get("transcription_confidence"),
         )
-    except (ToxicityAnalysisError, SlangModelError, RewriteServiceError, VoiceModelError) as exc:
+    except (ToxicityAnalysisError, SlangModelError, RewriteServiceError) as exc:
         raise ApiError(str(exc) or "Analysis failed", 503) from exc
     return jsonify(payload), 200
-
-
-@api_bp.route("/analyze-voice", methods=["POST"])
-@require_auth
-def analyze_voice():
-    logger.info("Voice transcription requested user_id=%s status=deferred", g.current_user_id)
-    raise ApiError("Voice transcription is currently deferred.", 503)
 
 
 @api_bp.route("/send", methods=["POST"])
@@ -615,10 +597,7 @@ def get_conversation(conversation_id):
 def run_analysis_pipeline(
     user_id,
     text,
-    input_type="text",
     conversation_id=None,
-    transcription_confidence=None,
-    transcription=None,
 ):
     preprocessor = services.preprocessor
     slang = services.slang
@@ -661,8 +640,7 @@ def run_analysis_pipeline(
             current_text=text,
             analyzed_text=text,
             processed_text=enriched,
-            input_type=input_type,
-            transcription_confidence=transcription_confidence,
+            input_type="text",
             send_status="draft",
             analyzed_at=utcnow(),
             profile_updated=False,
@@ -790,8 +768,7 @@ def run_analysis_pipeline(
         "context_messages": prior_messages,
         "processed_text": cleaned,
         "enriched_text": enriched,
-        "input_type": input_type,
-        "transcription_confidence": transcription_confidence,
+        "input_type": "text",
         "preprocessed": preprocessed,
         "slang": detections,
         "toxicity": toxicity_scores,

@@ -1,7 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from flask import Flask
 
@@ -82,30 +82,6 @@ class IntegrationFlowTests(unittest.TestCase):
         )
         self.assertEqual(stored.decision, "ALLOW")
         self.assertEqual(message.input_type, "text")
-
-    def test_voice_transcription_then_analysis(self):
-        transcriber = MagicMock()
-        transcriber.transcribe_audio_file.return_value = {
-            "success": True,
-            "text": "thanks for the update",
-            "language": "en",
-            "duration": 1.2,
-            "transcription_confidence": 0.91,
-        }
-        result = transcriber.transcribe_audio_file("/tmp/sample.wav")
-        self.assertTrue(result["success"])
-        message = seed_message(
-            self.session,
-            self.data["conversation"],
-            self.data["user"],
-            {"original_text": result["text"], "input_type": "voice"},
-        )
-        message.transcription_confidence = result["transcription_confidence"]
-        self.session.commit()
-        seed_toxicity(self.session, message, SAFE_VECTOR)
-        fetched = Message.get_by_id(self.session, message.message_id)
-        self.assertEqual(fetched.input_type, "voice")
-        self.assertAlmostEqual(fetched.transcription_confidence, 0.91)
 
     def test_multiple_messages_update_profile(self):
         from modules.behavior_profile import BehaviorProfileManager

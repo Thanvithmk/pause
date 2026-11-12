@@ -60,9 +60,8 @@ JWT is stored in `localStorage` as `pptis_token`. A 401 response clears the toke
 |---|---|
 | `src/main.jsx` | React root + `BrowserRouter` |
 | `src/App.jsx` | Session restore, login/register, Chat / Dashboard nav |
-| `src/components/Chat.jsx` | Thread, wires text/voice/results |
+| `src/components/Chat.jsx` | Thread, wires text analysis and results |
 | `src/components/TextInput.jsx` | Placeholder “Type your message…”, Send / Analyze → `POST /api/analyze` |
-| `src/components/VoiceInput.jsx` | Mic record/stop, waveform bars → `POST /api/analyze-voice` |
 | `src/components/AnalysisResults.jsx` | Six toxicity bars, PACL, `P_esc`, final risk, color-coded decision |
 | `src/components/BehaviorDashboard.jsx` | 7/30/90 day charts from `GET /api/dashboard` |
 | `src/services/api.js` | Axios instance, token helpers, API wrappers |

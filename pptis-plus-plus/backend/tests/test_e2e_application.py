@@ -193,12 +193,6 @@ class EndToEndApplicationTests(unittest.TestCase):
         after = self.client.get("/api/user/profile", headers=self.headers_a)
         self.assertEqual(after.status_code, 401)
 
-    def test_voice_transcription_is_deferred(self):
-        response = self.client.post("/api/analyze-voice", headers=self.headers_a)
-        body = response.get_json()
-        self.assertEqual(response.status_code, 503, body)
-        self.assertIn("currently deferred", body["message"])
-
     def test_single_conversation_demonstration(self):
         created = self.client.post("/api/conversations", headers=self.headers_a)
         self.assertEqual(created.status_code, 201, created.get_json())

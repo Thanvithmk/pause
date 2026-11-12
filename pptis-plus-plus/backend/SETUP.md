@@ -9,10 +9,8 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install flask flask-cors python-dotenv PyJWT werkzeug sqlalchemy psycopg2-binary
-pip install numpy scikit-learn torch transformers faster-whisper groq
+pip install numpy scikit-learn torch transformers groq
 ```
-
-Optional voice/GPU packages: `faster-whisper` needs FFmpeg on the host.
 
 `requirements.txt` is a placeholder; install the packages above until it is filled.
 
@@ -44,7 +42,6 @@ Copy `backend/.env.example` to `backend/.env` and edit values.
 | `JWT_SECRET_KEY` | JWT signing | `change-me-jwt` |
 | `DATABASE_URL` | PostgreSQL URI | required |
 | `CORS_ORIGINS` | Allowed frontend origins | `http://localhost:3000` |
-| `WHISPER_MODEL` | Faster-Whisper model | `base.en` only |
 | `GROQ_API_KEY` | Groq rewrite key | required |
 | `GROQ_MODEL` | Groq model | `openai/gpt-oss-120b` only |
 | `LOGISTIC_B`, `LOGISTIC_W_E`, `LOGISTIC_W_P` | Trained `P_esc` weights | `0`, `1`, `1` |
@@ -59,7 +56,7 @@ export FLASK_ENV=development
 python app.py
 ```
 
-Listens on `0.0.0.0:5000` by default (`HOST`, `PORT`). Startup loads `xlm-roberta-base`, `backend/models/slang_literal_head.pt` (threshold 0.58), `unitary/toxic-bert`, and Whisper `base.en`. If one of those cannot load, the process exits. Groq is checked for a configured key and the model name `openai/gpt-oss-120b`. A failed Groq call returns an error and does not invent a rewrite.
+Listens on `0.0.0.0:5000` by default (`HOST`, `PORT`). Startup loads `xlm-roberta-base`, `backend/models/slang_literal_head.pt` (threshold 0.58), and `unitary/toxic-bert`. If one of those cannot load, the process exits. Groq is checked for a configured key and the model name `openai/gpt-oss-120b`. A failed Groq call returns an error and does not invent a rewrite.
 
 ## API endpoints
 
@@ -72,7 +69,6 @@ Prefix `/api` is registered in `app.py`. Legacy auth also exists at `/auth/*`.
 | POST | `/auth/logout` | bearer |
 | POST | `/auth/refresh` | refresh token |
 | POST | `/api/analyze` | bearer |
-| POST | `/api/analyze-voice` | bearer |
 | GET | `/api/user/profile` | bearer |
 | GET | `/api/dashboard?days=30` | bearer |
 | GET | `/api/conversation/<id>` | bearer (owner) |
@@ -118,19 +114,11 @@ curl -s http://localhost:5000/api/analyze \
 
 Response includes `toxicity`, `pacl`, `escalation_probability`, `final_risk`, `decision`, and optional `rewrite` / `delayed_send`.
 
-Analyze voice:
-
-```bash
-curl -s http://localhost:5000/api/analyze-voice \
-  -H "Authorization: Bearer $TOKEN" \
-  -F audio=@sample.wav
-```
-
 Password rules: 8+ characters, one uppercase letter, one digit, one special character. Usernames are alphanumeric, 3–20 characters.
 
 ## Tests
 
-The default suite uses the real slang, toxicity, and Whisper checkpoints. Groq completions inside the end-to-end tests are mocked. The live Groq call is separate:
+The default suite uses the real slang and toxicity checkpoints. Groq completions inside the end-to-end tests are mocked. The live Groq call is separate:
 
 ```bash
 cd backend

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import VoiceInput from "./VoiceInput";
 import AnalysisResults from "./AnalysisResults";
 import { deliveryConfirmed, visibleSentMessages } from "../utils/messageLifecycle";
 import { OPEN_CONVERSATION_KEY } from "./MessageHistory";
@@ -347,20 +346,6 @@ function Chat({ user }) {
     }
   }
 
-  function handleVoiceAnalysis(result, sourceText) {
-    const spoken = typeof sourceText === "string" ? sourceText : result.original_text;
-    const score = typeof result.risk_score === "number" ? result.risk_score : result.final_risk;
-    setText(spoken);
-    pushMessage("user", spoken, {
-      source: "voice",
-      messageId: result.message_id,
-      decision: result.decision,
-      riskScore: typeof score === "number" ? score : null,
-      scoreFailed: typeof score !== "number",
-    });
-    applyAnalysis(result, spoken);
-  }
-
   const delayStillRunning = flowState === FLOW.DELAYED_SEND && remainingSeconds !== 0;
   const showSendButton = flowState !== FLOW.DELAYED_SEND || remainingSeconds === 0;
   const sendDisabled =
@@ -635,7 +620,6 @@ function Chat({ user }) {
             placeholder="Type your message..."
             className="h-12 flex-1 rounded-full bg-[#f4f5f9] px-5 text-sm outline-none"
           />
-          <VoiceInput compact onAnalyzed={handleVoiceAnalysis} conversationId={conversationId} />
           {flowState === FLOW.WARNING && (
             <span className="hidden items-center gap-1 rounded-full bg-[#fff3d6] px-3 py-2 text-xs font-bold text-[#e39a12] sm:inline-flex">
               <span aria-hidden="true">⚠</span> WARN

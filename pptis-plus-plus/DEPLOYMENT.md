@@ -10,11 +10,11 @@ Example layout (not committed as files; copy if you want containers):
 
 ```dockerfile
 FROM python:3.11-slim
-RUN apt-get update && apt-get install -y ffmpeg build-essential && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY backend /app
 RUN pip install --no-cache-dir flask flask-cors python-dotenv PyJWT werkzeug sqlalchemy \
-    psycopg2-binary numpy scikit-learn torch transformers faster-whisper groq gunicorn
+    psycopg2-binary numpy scikit-learn torch transformers groq gunicorn
 ENV FLASK_ENV=production
 EXPOSE 5000
 CMD ["gunicorn", "-b", "0.0.0.0:5000", "-w", "2", "app:app"]
@@ -38,7 +38,7 @@ COPY --from=build /ui/dist /usr/share/nginx/html
 - `web`: frontend image or static bucket
 - Do not run Flask’s builtin server as the public process; use gunicorn/uvicorn workers
 
-Whisper/BERT weights are large. Prefer a persistent volume for Hugging Face cache (`HF_HOME`) so models are not re-downloaded on every deploy.
+BERT weights are large. Prefer a persistent volume for Hugging Face cache (`HF_HOME`) so models are not re-downloaded on every deploy.
 
 ## Database migration
 
@@ -74,7 +74,7 @@ Terminate TLS at a reverse proxy:
 - Set `CORS_ORIGINS` to the HTTPS frontend origin only
 - Send HSTS once certificates are stable
 
-WebSockets are not required. Voice uploads are multipart; raise `client_max_body_size` (e.g. 10–25 MB).
+WebSockets are not required.
 
 ## Monitoring and logging
 
@@ -85,14 +85,14 @@ Ship stdout to:
 - journald / CloudWatch / Datadog
 - retain 401/429 spikes (login lockout after 5 failures / 15 minutes)
 
-Health: `POST /api/auth/login` is not a health check. Add a cheap `/health` later or scrape process liveness. Watch GPU/CPU when Whisper and Toxic-BERT load.
+Health: `GET /api/health` reports whether the slang and toxicity models loaded. Watch GPU/CPU when Toxic-BERT and the slang encoder load.
 
 Trained logistic params persist in `backend/escalation_logistic.json`. Back that file up with the database.
 
 ## Scaling
 
 - **API:** gunicorn with 2–4 sync workers per CPU for I/O routes. Model inference is heavy; keep a small worker count or a dedicated inference process.
-- **Models:** load Whisper, Toxic-BERT, and XLM-R once per process. Avoid forking after CUDA init.
+- **Models:** load Toxic-BERT and XLM-R once per process. Avoid forking after CUDA init.
 - **DB:** Postgres with connection pooling (PgBouncer) if worker count grows. The application does not start on SQLite.
 - **Jobs:** delayed-send expiry is computed on read; no background worker is required.
 - **Frontend:** static files scale independently of the API.

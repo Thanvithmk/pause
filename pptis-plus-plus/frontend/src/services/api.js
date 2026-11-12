@@ -50,18 +50,6 @@ export async function analyzeText(text, conversationId) {
   return data;
 }
 
-export async function analyzeVoice(audioBlob, filename = "recording.webm", conversationId) {
-  const form = new FormData();
-  form.append("audio", audioBlob, filename);
-  if (conversationId) {
-    form.append("conversation_id", conversationId);
-  }
-  const { data } = await api.post("/api/analyze-voice", form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return data;
-}
-
 export async function recordIntervention({ messageId, userResponse, outcome }) {
   const { data } = await api.post("/api/intervention-response", {
     message_id: messageId,
