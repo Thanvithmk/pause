@@ -144,7 +144,7 @@ Pipeline: preprocess → slang disambiguation → toxicity `X_t` → PACL (`λ =
 | `[0.55, 0.80)` | REWRITE |
 | `[0.80, 1.00]` | DELAYED-SEND |
 
-REWRITE adds `rewrite.suggested_text` (no send-original). DELAYED-SEND adds `delayed_send.lock_id` and `countdown_seconds` (default 60).
+REWRITE adds `rewrite.suggested_text` (no send-original). DELAYED-SEND adds `delayed_send.lock_id` and `countdown_seconds` (default 5).
 
 **400** missing text, **401** no/invalid token, **403** conversation not owned, **404** conversation missing, **500** model/storage failure.
 

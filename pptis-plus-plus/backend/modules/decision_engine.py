@@ -26,7 +26,7 @@ def _load_decision_config():
             "T_allow": 0.30,
             "T_warn": 0.55,
             "T_rewrite": 0.80,
-            "delayed_send_duration": 60,
+            "delayed_send_duration": 5,
         }
 
 
@@ -63,6 +63,10 @@ class DecisionEngine:
         )
         decision, guardrail = self._apply_safety_label(
             decision, guardrail, safety_label, safety_flags
+        )
+        decision, guardrail = self._apply_playful_emoji(decision, guardrail, safety_flags)
+        decision, guardrail = self._apply_contextual_threat(
+            decision, guardrail, safety_flags, toxicity_vector
         )
 
         confidence = self._confidence(score, decision)
@@ -297,6 +301,46 @@ class DecisionEngine:
             reason = f"safety_pattern:{safety_label}"
             return safety_label, reason if not guardrail else f"{guardrail}+{reason}"
         return decision, guardrail
+
+    @staticmethod
+    def _apply_playful_emoji(decision, guardrail, safety_flags):
+        """Laughter emoji can lower REWRITE or DELAYED-SEND to WARN. It does not change R."""
+        if not (safety_flags or {}).get("playful_emoji"):
+            return decision, guardrail
+        rank = {name: index for index, name in enumerate(DECISION_ORDER)}
+        if rank[decision] <= rank["WARN"]:
+            return decision, guardrail
+        reason = "playful_emoji"
+        return "WARN", reason if not guardrail else f"{guardrail}+{reason}"
+
+    @staticmethod
+    def _apply_contextual_threat(decision, guardrail, safety_flags, toxicity_vector=None):
+        """Lower a threat reading that the contextual assessment rejects.
+
+        Toxic-BERT scores and the risk score are not changed. An identity-hate
+        score at the existing guardrail level is left in place.
+        """
+        assessment = (safety_flags or {}).get("contextual_threat") or {}
+        if assessment.get("effect") != "clear":
+            return decision, guardrail
+        identity = float((toxicity_vector or {}).get("identity_hate", 0.0) or 0.0)
+        if identity >= 0.70:
+            return decision, guardrail
+        floor = assessment.get("floor") or "ALLOW"
+        if floor not in DECISION_ORDER:
+            floor = "ALLOW"
+        rank = {name: index for index, name in enumerate(DECISION_ORDER)}
+        if rank[decision] <= rank[floor]:
+            return decision, guardrail
+        reason = f"contextual_threat:{assessment.get('category') or 'clear'}"
+        logger.info(
+            "Contextual threat lowered %s to %s category=%s object=%s",
+            decision,
+            floor,
+            assessment.get("category"),
+            assessment.get("object"),
+        )
+        return floor, reason if not guardrail else f"{guardrail}+{reason}"
 
     @staticmethod
     def _validate_risk(value):

@@ -17,6 +17,13 @@ from modules.database import (
     get_session,
     utcnow,
 )
+from modules.contextual_threat import assess
+from modules.linguistic_features import (
+    annotate_slang_usage,
+    emoji_annotations,
+    has_playful_laughter,
+    recognize_in_parallel,
+)
 from modules.rewrite_engine import REQUIRED_GROQ_MODEL, RewriteServiceError
 from modules.send_gateway import SendError, send_analyzed_message
 from modules.slang_layer import SlangModelError
@@ -79,6 +86,18 @@ class PipelineServices:
         from modules.slang_layer import SlangInterpreter
 
         return self._load("slang", SlangInterpreter)
+
+    @property
+    def slang_recognition(self):
+        from modules.slang_recognition import SlangRecognizer
+
+        return self._load("slang_recognition", SlangRecognizer)
+
+    @property
+    def emoji_recognition(self):
+        from modules.emoji_recognition import EmojiRecognizer
+
+        return self._load("emoji_recognition", EmojiRecognizer)
 
     @property
     def toxicity(self):
@@ -613,8 +632,21 @@ def run_analysis_pipeline(
     prior_context = "\n".join(prior_messages)
     preprocessed = preprocessor.preprocess(text)
     cleaned = preprocessed["cleaned_text"]
+    linguistic_features = recognize_in_parallel(
+        cleaned,
+        services.slang_recognition,
+        services.emoji_recognition,
+    )
     slang_result = slang.interpret(cleaned, user_id=user_id)
+    linguistic_features["slang"] = annotate_slang_usage(
+        linguistic_features["slang"],
+        slang_result.get("detections"),
+    )
+    contextual = assess(cleaned)
     enriched = slang_result.get("enriched_text_with_context") or cleaned
+    notes = emoji_annotations(linguistic_features.get("emoji"))
+    if notes:
+        enriched = f"{enriched} {' '.join(notes)}"
     toxicity_detail = toxicity.inspect(
         enriched,
         context=prior_context,
@@ -673,6 +705,8 @@ def run_analysis_pipeline(
             "quoted": toxicity_detail.get("quoted"),
             "negated": toxicity_detail.get("negated"),
             "playful_idiom": toxicity_detail.get("playful_idiom"),
+            "playful_emoji": has_playful_laughter(linguistic_features.get("emoji")),
+            "contextual_threat": contextual,
         }
         mathematical_decision = risk_calc.get_risk_category(final_risk)[0]
         decision = decisions.make_decision(
@@ -753,13 +787,14 @@ def run_analysis_pipeline(
         close_session()
 
     logger.info(
-        "Analysis complete user_id=%s message_id=%s decision=%s mathematical=%s R=%.4f guardrail=%s",
+        "Analysis complete user_id=%s message_id=%s decision=%s mathematical=%s R=%.4f guardrail=%s contextual=%s",
         user_id,
         message_id,
         decision["decision"],
         mathematical_decision,
         final_risk,
         decision.get("guardrail"),
+        contextual.get("category"),
     )
     return {
         "message_id": message_id,
@@ -771,6 +806,7 @@ def run_analysis_pipeline(
         "input_type": "text",
         "preprocessed": preprocessed,
         "slang": detections,
+        "linguistic_features": linguistic_features,
         "toxicity": toxicity_scores,
         "model_toxicity": model_scores,
         "safety": {
@@ -779,6 +815,7 @@ def run_analysis_pipeline(
             "negated": safety_flags["negated"],
             "playful_idiom": safety_flags["playful_idiom"],
         },
+        "contextual_threat": contextual,
         "toxicity_truncated": bool(toxicity_detail.get("truncated")),
         "behavioral_baseline": _baseline_view(profile),
         "profile": profile,

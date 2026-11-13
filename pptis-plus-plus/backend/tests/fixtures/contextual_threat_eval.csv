@@ -1,0 +1,40 @@
+split,category,threat_gold,text
+eval,harmless,negative,I will gently cut your nails.
+eval,harmless,negative,I will cut your hair.
+eval,harmless,negative,I will trim your nails.
+eval,harmless,negative,I will trim your beard.
+eval,harmless,negative,I will clean your nails.
+eval,harmless,negative,The nurse will clean the wound.
+eval,harmless,negative,Apply medicine to the cut.
+eval,harmless,negative,The doctor will give you an injection.
+eval,harmless,negative,I will cut the vegetables.
+eval,harmless,negative,I will cut the paper for the poster.
+eval,harmless,negative,I will cut the fabric.
+eval,harmless,negative,I will cut the rope.
+eval,harmless,negative,Please clip my nails before dinner.
+eval,harmless,negative,She cut her hair short.
+eval,explicit,positive,I will cut your head.
+eval,explicit,positive,I will hurt you.
+eval,explicit,positive,I will attack you.
+eval,explicit,positive,I will stab you.
+eval,explicit,positive,I will kill you.
+eval,explicit,positive,I will hurt you after class.
+eval,explicit,positive,I will gently cut your head.
+eval,explicit,positive,I will slash your throat.
+eval,explicit,positive,I will cut your throat.
+eval,explicit,positive,I am going to beat you.
+eval,ambiguous,hold,I will cut you.
+eval,ambiguous,hold,I will deal with you.
+eval,ambiguous,hold,You will regret this.
+eval,ambiguous,hold,I will finish you.
+eval,ambiguous,hold,I will make you pay.
+eval,ambiguous,hold,I will end you.
+eval,figurative,negative,That joke killed me.
+eval,figurative,negative,This exam destroyed me.
+eval,figurative,negative,I am dead tired.
+eval,figurative,negative,I will kill this presentation.
+eval,figurative,negative,This deadline is killing me.
+eval,figurative,negative,That playlist killed me.
+eval,mixed,positive,I will cut your nails and then I will cut your head.
+eval,control,negative,I will help you.
+eval,control,negative,Thanks for waiting.

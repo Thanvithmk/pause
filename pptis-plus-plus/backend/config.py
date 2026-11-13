@@ -56,7 +56,7 @@ class Config:
     THRESHOLD_ALLOW = 0.30
     THRESHOLD_WARN = 0.55
     THRESHOLD_REWRITE = 0.80
-    DELAYED_SEND_DURATION = 60
+    DELAYED_SEND_DURATION = 5
 
     # CEL weight vector W (6 dimensions)
     CEL_WEIGHT_VECTOR = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0)

@@ -45,6 +45,10 @@ function AnalysisResults({ analysis, analyzing = false }) {
   const toxicity = analysis.toxicity || analysis.toxicity_scores || analysis;
   const decision = analysis.decision || analysis.risk?.decision || "ALLOW";
   const slang = Array.isArray(analysis.slang) ? analysis.slang : [];
+  const recognized = analysis.linguistic_features?.slang?.terms || [];
+  const emojis = analysis.linguistic_features?.emoji?.emojis || [];
+  const combinations = analysis.linguistic_features?.emoji?.combinations || [];
+  const slangItems = recognized.length > 0 ? recognized : slang;
   const baseline = analysis.behavioral_baseline;
   const delta = analysis.delta_vector || analysis.delta_vector_6d;
   const escalationFeature = scoreOf(analysis, ["escalation_feature"]);
@@ -62,12 +66,27 @@ function AnalysisResults({ analysis, analyzing = false }) {
         </div>
         {analysis.mathematical_decision && analysis.mathematical_decision !== decision && (
           <p className="mt-2 text-xs text-slate-500">
-            Mathematical risk is {analysis.mathematical_decision}. A separate safety guardrail raised the intervention
-            {analysis.guardrail ? ` (${analysis.guardrail})` : ""}. Final risk was not changed.
+            Mathematical risk is {analysis.mathematical_decision}.{" "}
+            {String(analysis.guardrail || "").includes("contextual_threat")
+              ? "The contextual threat assessment lowered the intervention. Toxic-BERT scores and final risk were not changed."
+              : String(analysis.guardrail || "").includes("playful_emoji")
+              ? "Laughter emoji lowered the intervention. Final risk was not changed."
+              : `A separate safety guardrail raised the intervention${
+                  analysis.guardrail ? ` (${analysis.guardrail})` : ""
+                }. Final risk was not changed.`}
           </p>
         )}
         {analysis.guardrail && analysis.mathematical_decision === decision && (
           <p className="mt-2 text-xs text-slate-500">Safety guardrail: {analysis.guardrail}</p>
+        )}
+        {analysis.contextual_threat &&
+          analysis.contextual_threat.category &&
+          analysis.contextual_threat.category !== "none" && (
+          <p className="mt-2 text-xs text-slate-500">
+            Contextual assessment: {String(analysis.contextual_threat.category).replaceAll("_", " ")}
+            {analysis.contextual_threat.object ? ` · ${analysis.contextual_threat.object}` : ""}.
+            This is separate from the Toxic-BERT scores.
+          </p>
         )}
         {analysis.rewrite?.status === "unavailable" && (
           <p className="mt-2 text-xs text-slate-500">
@@ -102,21 +121,52 @@ function AnalysisResults({ analysis, analyzing = false }) {
         </div>
       </div>
 
-      {slang.length > 0 && (
+      {slangItems.length > 0 && (
         <div>
           <p className="mb-2 text-sm font-medium">Slang</p>
           <ul className="space-y-2 text-sm">
-            {slang.map((item) => (
-              <li key={`${item.term}-${item.usage}`} className="rounded-lg bg-[#f6f7fb] p-3">
-                <p className="font-medium">{item.term}</p>
+            {slangItems.map((item) => (
+              <li key={`${item.term}-${item.start ?? item.usage}`} className="rounded-lg bg-[#f6f7fb] p-3">
+                <p className="font-medium">
+                  {item.term}
+                  {item.ambiguous ? " · ambiguous" : ""}
+                </p>
                 <p className="text-slate-400">
-                  {item.usage}
+                  {item.usage || "recognized"}
                   {typeof item.confidence === "number" ? ` · ${item.confidence.toFixed(4)}` : ""}
                 </p>
                 {item.meaning && <p className="mt-1 text-slate-600">{item.meaning}</p>}
+                {Array.isArray(item.senses) && item.senses.map((sense) => (
+                  <p key={`${sense.definition}-${sense.category}`} className="mt-1 text-slate-600">
+                    {sense.definition}
+                    {sense.category ? ` · ${sense.category}` : ""}
+                  </p>
+                ))}
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {emojis.length > 0 && (
+        <div>
+          <p className="mb-2 text-sm font-medium">Emoji</p>
+          <ul className="space-y-2 text-sm">
+            {emojis.map((item) => (
+              <li key={`${item.emoji}-${item.start}`} className="rounded-lg bg-[#f6f7fb] p-3">
+                <p className="font-medium">{item.emoji}</p>
+                <p className="text-slate-600">{item.description || item.meaning || "No saved description"}</p>
+                {item.meaning && item.description && (
+                  <p className="text-slate-400">{item.meaning}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+          {combinations.length > 0 && (
+            <p className="mt-2 text-xs text-slate-400">
+              Combinations: {combinations.map((item) => item.emoji).join("  ")}
+            </p>
+          )}
         </div>
       )}
 

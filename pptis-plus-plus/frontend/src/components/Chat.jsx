@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import AnalysisResults from "./AnalysisResults";
+import EmojiPanel from "./EmojiPanel";
 import { deliveryConfirmed, visibleSentMessages } from "../utils/messageLifecycle";
 import { OPEN_CONVERSATION_KEY } from "./MessageHistory";
 import {
@@ -48,6 +49,7 @@ function Chat({ user }) {
   const [remainingSeconds, setRemainingSeconds] = useState(null);
   const sendingRef = useRef(false);
   const analyzedTextRef = useRef("");
+  const inputRef = useRef(null);
 
   function mapThread(thread) {
     return (thread.messages || []).map((item) => {
@@ -226,7 +228,7 @@ function Chat({ user }) {
     setWarnHidden(false);
     setActiveExercise(null);
     if (decision === "DELAYED-SEND") {
-      setRemainingSeconds(result?.delayed_send?.countdown_seconds || 60);
+      setRemainingSeconds(result?.delayed_send?.countdown_seconds || 5);
     }
     return result;
   }
@@ -243,6 +245,19 @@ function Chat({ user }) {
       setWarnHidden(false);
       setError("");
     }
+  }
+
+  function insertEmoji(emoji) {
+    const field = inputRef.current;
+    const start = field?.selectionStart ?? text.length;
+    const end = field?.selectionEnd ?? text.length;
+    const next = `${text.slice(0, start)}${emoji}${text.slice(end)}`;
+    handleTextChange(next);
+    const caret = start + emoji.length;
+    requestAnimationFrame(() => {
+      field?.focus();
+      field?.setSelectionRange(caret, caret);
+    });
   }
 
   async function runAnalyze(sourceText = text.trim()) {
@@ -609,12 +624,9 @@ function Chat({ user }) {
         className="shrink-0 border-t border-slate-100 px-4 py-4"
       >
         <div className="flex items-center gap-2">
-          <span className="grid h-10 w-10 place-items-center text-slate-300" title="Attachments are not available" aria-hidden="true">
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="m8 12 4.5-4.5a3 3 0 1 1 4.2 4.2L10 18.4a4.2 4.2 0 0 1-6-6L11.5 5" strokeLinecap="round" />
-            </svg>
-          </span>
+          <EmojiPanel onInsert={insertEmoji} />
           <input
+            ref={inputRef}
             value={text}
             onChange={(event) => handleTextChange(event.target.value)}
             placeholder="Type your message..."

@@ -262,7 +262,12 @@ class SafetyPatternAnalyzer:
         if THREAT.search(sentence):
             if PLAYFUL.search(sentence) and re.search(r"\b(plastic|toy|prop|pretend)\b", sentence, re.I):
                 return "ALLOW"
-            return "DELAYED-SEND"
+            from modules.contextual_threat import assess
+
+            # A harmless object or a figurative target is not a threat label.
+            # Explicit and ambiguous threat readings still return DELAYED-SEND.
+            if assess(sentence).get("effect") != "clear":
+                return "DELAYED-SEND"
         if re.search(r"\byou(?:'re| are) dumb\b", sentence, re.I):
             return "REWRITE"
         if re.search(r"\byou(?:'re| are)\b.{0,48}\buseless\b", sentence, re.I) and not re.search(

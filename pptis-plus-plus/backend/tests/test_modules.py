@@ -214,6 +214,70 @@ class DecisionEngineTests(unittest.TestCase):
         self.assertEqual(self.engine.make_decision(0.80)["decision"], "DELAYED-SEND")
         self.assertEqual(self.engine.make_decision(1.00)["decision"], "DELAYED-SEND")
 
+    def test_laughter_emoji_lowers_a_delayed_send_without_changing_risk(self):
+        result = self.engine.make_decision(0.90, safety_flags={"playful_emoji": True})
+        self.assertEqual(result["decision"], "WARN")
+        self.assertEqual(result["risk_score"], 0.90)
+        self.assertEqual(result["guardrail"], "playful_emoji")
+        plain = self.engine.make_decision(0.90, safety_flags={"playful_emoji": False})
+        self.assertEqual(plain["decision"], "DELAYED-SEND")
+
+    def test_harmless_object_lowers_the_intervention_without_changing_risk(self):
+        flags = {
+            "contextual_threat": {
+                "effect": "clear",
+                "category": "harmless_physical",
+                "floor": "ALLOW",
+                "object": "nails",
+            }
+        }
+        result = self.engine.make_decision(
+            0.40,
+            toxicity_vector={"threat": 0.81, "identity_hate": 0.04},
+            safety_flags=flags,
+        )
+        self.assertEqual(result["decision"], "ALLOW")
+        self.assertEqual(result["risk_score"], 0.40)
+        self.assertIn("contextual_threat:harmless_physical", result["guardrail"])
+        self.assertIn("threat_vector_guardrail", result["guardrail"])
+
+    def test_explicit_threat_reading_does_not_lower_the_decision(self):
+        result = self.engine.make_decision(
+            0.90,
+            safety_flags={"contextual_threat": {"effect": "hold", "category": "explicit_threat"}},
+        )
+        self.assertEqual(result["decision"], "DELAYED-SEND")
+        self.assertEqual(result["risk_score"], 0.90)
+
+    def test_insult_floor_stops_above_allow(self):
+        result = self.engine.make_decision(
+            0.90,
+            safety_flags={
+                "contextual_threat": {
+                    "effect": "clear",
+                    "category": "harmless_physical",
+                    "floor": "REWRITE",
+                }
+            },
+        )
+        self.assertEqual(result["decision"], "REWRITE")
+        self.assertEqual(result["risk_score"], 0.90)
+
+    def test_identity_guardrail_is_not_cleared(self):
+        result = self.engine.make_decision(
+            0.40,
+            toxicity_vector={"identity_hate": 0.70, "threat": 0.10},
+            safety_flags={
+                "contextual_threat": {
+                    "effect": "clear",
+                    "category": "harmless_physical",
+                    "floor": "ALLOW",
+                }
+            },
+        )
+        self.assertEqual(result["decision"], "DELAYED-SEND")
+        self.assertEqual(result["guardrail"], "identity_harm_guardrail")
+
     def test_rejects_non_finite_risk(self):
         with self.assertRaises(ValueError):
             self.engine.make_decision(float("nan"))
