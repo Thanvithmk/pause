@@ -65,6 +65,8 @@ CREATE TABLE risk_results (
     escalation_probability DOUBLE PRECISION NOT NULL,
     final_risk DOUBLE PRECISION NOT NULL,
     decision decision_action_enum NOT NULL,
+    trigger_words JSONB,
+    trigger_category VARCHAR(64),
     timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

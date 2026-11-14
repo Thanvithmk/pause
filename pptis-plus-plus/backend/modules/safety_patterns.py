@@ -66,8 +66,14 @@ HYPOTHETICAL = re.compile(
     r"\b(hypothetically|what if|what counts as a threat|would you ever|policy)\b",
     re.I,
 )
+IDENTITY_TOPIC = re.compile(r"\b(community|communities|religion|caste|race)\b", re.I)
+URGED_ATTACK = re.compile(
+    r"\bshould\s+(?:just\s+|really\s+)?(?:attack|hurt|beat|hit)\s+you\b|"
+    r"\b(?:attack|hurt|beat|hit)\s+you\s+for\s+(?:being|your)\b",
+    re.I,
+)
 IDENTITY_HATE = re.compile(
-    r"\b(religion|caste|race|community|your kind|go back to where you came from|"
+    r"\b(your kind|go back to where you came from|"
     r"not even human|should disappear|wipe out|don't belong on this campus|"
     r"girls can't code|disabled students are a burden)\b",
     re.I,
@@ -216,19 +222,24 @@ class SafetyPatternAnalyzer:
             label = _max_label(label, "WARN")
         if re.search(r"\bmid\b.{0,24}\bmean\b|\bnoob\b", unfolded, re.I):
             label = _max_label(label, "WARN")
-        if IDENTITY_HATE.search(unfolded) and not flags["quoted"]:
+        topic = bool(IDENTITY_TOPIC.search(unfolded))
+        attack = bool(IDENTITY_HATE.search(unfolded))
+        coercive = bool(re.search(r"\b(or i(?:'ll| will)|i(?:'ll| will) make you)\b", unfolded, re.I))
+        hostile = bool(
+            DEHUMANIZE.search(unfolded)
+            or IDENTITY_VIOLENCE.search(unfolded)
+            or coercive
+            or re.search(
+                r"\b(hurt|punished|disappear|don't belong|go back|wiped out|wipe out)\b",
+                unfolded,
+                re.I,
+            )
+        )
+        if URGED_ATTACK.search(unfolded) and not flags["quoted"] and not flags["negated"]:
+            label = _max_label(label, "REWRITE")
+        if (attack or (topic and hostile)) and not flags["quoted"]:
             identity = True
-            coercive = bool(re.search(r"\b(or i(?:'ll| will)|i(?:'ll| will) make you)\b", unfolded, re.I))
-            if (
-                DEHUMANIZE.search(unfolded)
-                or IDENTITY_VIOLENCE.search(unfolded)
-                or coercive
-                or re.search(
-                    r"\b(hurt|punished|disappear|don't belong|go back|wiped out|wipe out)\b",
-                    unfolded,
-                    re.I,
-                )
-            ):
+            if hostile:
                 label = _max_label(label, "DELAYED-SEND")
             else:
                 label = _max_label(label, "REWRITE")

@@ -406,7 +406,14 @@ class MessageLifecycleTests(unittest.TestCase):
         payload = dashboard.get_json()
         self.assertEqual(dashboard.status_code, 200, payload)
         self.assertIn("intervention_effectiveness", payload)
-        self.assertGreaterEqual(payload["intervention_effectiveness"]["counts"]["warn_success"], 1)
+        counts = payload["intervention_effectiveness"]["counts"]
+        self.assertGreaterEqual(counts["warn_fail"], 1)
+        total = counts["warn_success"] + counts["warn_fail"]
+        self.assertAlmostEqual(
+            payload["intervention_effectiveness"]["scores"]["WARN_eff"],
+            counts["warn_success"] / total,
+        )
+        self.assertLess(payload["intervention_effectiveness"]["scores"]["WARN_eff"], 1)
         session = get_session()
         try:
             risk = session.query(RiskResult).filter(RiskResult.message_id == body["message_id"]).one()

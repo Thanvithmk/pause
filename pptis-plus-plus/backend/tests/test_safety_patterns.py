@@ -151,6 +151,21 @@ class ContextualSafetyTests(unittest.TestCase):
         result = self.layer.score("They're not even human if they dress like that.")
         self.assertEqual(result["label"], "DELAYED-SEND")
 
+    def test_urged_community_attack_is_rewrite(self):
+        result = self.layer.score("Someone should attack you for being part of that community.")
+        self.assertEqual(result["label"], "REWRITE")
+
+    def test_neutral_community_mention_is_allow(self):
+        result = self.layer.score(
+            "I am interested in learning more about the community's role in our town "
+            "and would appreciate the chance to discuss it further."
+        )
+        self.assertEqual(result["label"], "ALLOW")
+
+    def test_community_attack_stays_delayed(self):
+        result = self.layer.score("That community should disappear.")
+        self.assertEqual(result["label"], "DELAYED-SEND")
+
 
 if __name__ == "__main__":
     unittest.main()

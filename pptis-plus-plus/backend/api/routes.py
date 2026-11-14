@@ -36,6 +36,45 @@ api_bp = Blueprint("api", __name__)
 CEL_LABELS = ("toxic", "threat", "insult", "severe_toxic", "obscene", "identity_hate")
 
 
+def _fill_trigger_categories(session, recent):
+    from modules.trigger_category import CATEGORIES, categorize_many
+
+    stopped = [
+        (risk, message)
+        for risk, message in recent
+        if risk.decision in ("WARN", "REWRITE", "DELAYED-SEND")
+    ]
+    missing = [
+        (risk, message)
+        for risk, message in stopped
+        if not risk.trigger_category
+    ]
+    try:
+        categories = categorize_many(
+            [(risk.risk_id, message.original_text or "") for risk, message in missing]
+        )
+    except Exception:
+        logger.exception("Trigger categories could not be loaded")
+        categories = {}
+    changed = False
+    for risk, _message in missing:
+        category = categories.get(risk.risk_id)
+        if category:
+            risk.trigger_category = category
+            changed = True
+    if changed:
+        session.commit()
+    counts = {}
+    for risk, _message in stopped:
+        if risk.trigger_category:
+            counts[risk.trigger_category] = counts.get(risk.trigger_category, 0) + 1
+    return [
+        {"category": name, "count": counts[name]}
+        for name in CATEGORIES
+        if counts.get(name)
+    ]
+
+
 def _baseline_view(profile):
     source = profile if isinstance(profile, dict) else {}
     view = {}
@@ -370,6 +409,17 @@ def dashboard():
             .limit(50)
             .all()
         )
+        categorized = (
+            session.query(RiskResult, Message)
+            .join(Message, RiskResult.message_id == Message.message_id)
+            .filter(
+                Message.user_id == user_id,
+                RiskResult.timestamp >= cutoff,
+                RiskResult.decision.in_(("WARN", "REWRITE", "DELAYED-SEND")),
+            )
+            .order_by(RiskResult.timestamp.desc())
+            .all()
+        )
         trends = (
             session.query(
                 day_expr,
@@ -388,6 +438,7 @@ def dashboard():
             or 0
         )
         dictionary_terms = session.query(func.count(SlangDictionary.slang_id)).scalar() or 0
+        trigger_categories = _fill_trigger_categories(session, categorized)
     except Exception:
         logger.exception("Dashboard query failed user_id=%s", user_id)
         raise ApiError("Could not load dashboard", 500)
@@ -396,14 +447,6 @@ def dashboard():
 
     learning = services.learning
     insights = learning.generate_user_insights(user_id) if learning else []
-    escalation_history = [
-        {
-            "timestamp": risk.timestamp.isoformat() if risk.timestamp else None,
-            "trigger_topic": (message.original_text or "").strip()[:160],
-        }
-        for risk, message in recent
-        if risk.decision in ("WARN", "REWRITE", "DELAYED-SEND")
-    ]
     warn = int(decision_counts.get("WARN", 0))
     rewrite = int(decision_counts.get("REWRITE", 0))
     delayed = int(decision_counts.get("DELAYED-SEND", 0))
@@ -438,7 +481,7 @@ def dashboard():
         "decision_breakdown": [
             {"name": key, "value": int(value)} for key, value in decision_counts.items()
         ],
-        "escalation_history": escalation_history,
+        "trigger_categories": trigger_categories,
         "recent_activity": [
             {
                 "decision": risk.decision,

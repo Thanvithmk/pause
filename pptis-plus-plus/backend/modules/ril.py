@@ -159,7 +159,8 @@ class BehavioralLearning:
                 kind = feedback.intervention
                 if kind not in counts:
                     continue
-                if feedback.user_response == "accepted":
+                # Heeding the intervention means the original was not sent.
+                if feedback.user_response in ("edited", "rejected"):
                     counts[kind]["success"] += 1
                 else:
                     counts[kind]["fail"] += 1
@@ -201,7 +202,12 @@ class BehavioralLearning:
 
     def get_intervention_preferences(self, user_id):
         stats = self.update_ril_statistics(user_id)
-        ranked = sorted(stats.items(), key=lambda item: item[1], reverse=True)
+        heeded = self._heeded_counts(user_id)
+        ranked = sorted(
+            stats.items(),
+            key=lambda item: (item[1], heeded.get(item[0], 0)),
+            reverse=True,
+        )
         preferred_key, preferred_score = ranked[0]
         preferred = preferred_key.replace("_eff", "").replace("DELAYED_SEND", "DELAYED-SEND")
         result = {
@@ -270,7 +276,7 @@ class BehavioralLearning:
         preferences = self.get_intervention_preferences(user_id)
         if preferences["preferred"]:
             insights.append(
-                f"{preferences['preferred']} is currently the most effective intervention for you"
+                f"{preferences['preferred']} is the intervention this user follows most often"
             )
 
         logger.info("Generated %s insights for user_id=%s", len(insights), user_id)
@@ -338,3 +344,22 @@ class BehavioralLearning:
         if total == 0:
             return 0.0
         return counts["success"] / total
+
+    @staticmethod
+    def _heeded_counts(user_id):
+        session = get_session()
+        try:
+            record = (
+                session.query(InterventionEffectiveness)
+                .filter(InterventionEffectiveness.user_id == user_id)
+                .one_or_none()
+            )
+            if record is None:
+                return {"WARN_eff": 0, "REWRITE_eff": 0, "DELAYED_SEND_eff": 0}
+            return {
+                "WARN_eff": record.warn_success,
+                "REWRITE_eff": record.rewrite_success,
+                "DELAYED_SEND_eff": record.delayed_success,
+            }
+        finally:
+            close_session()

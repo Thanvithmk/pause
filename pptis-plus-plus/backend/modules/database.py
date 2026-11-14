@@ -126,6 +126,8 @@ def ensure_optional_columns():
             "mathematical_decision": "VARCHAR(32)",
             "guardrail_reason": "VARCHAR(64)",
             "model_toxicity": json_type,
+            "trigger_words": json_type,
+            "trigger_category": "VARCHAR(64)",
         },
     }
     with engine.begin() as connection:
@@ -432,6 +434,8 @@ class RiskResult(CRUDMixin, Base):
     mathematical_decision = Column(String(32))
     guardrail_reason = Column(String(64))
     model_toxicity = Column(JSON)
+    trigger_words = Column(JSON)
+    trigger_category = Column(String(64))
     timestamp = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
     message = relationship("Message", back_populates="risk_result")
