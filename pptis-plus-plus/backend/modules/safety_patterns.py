@@ -150,6 +150,28 @@ def _max_label(left, right):
     return left if RANK[left] >= RANK[right] else right
 
 
+def address_of(text):
+    """Who the harsh wording is about.
+
+    person: a second-person line such as "you are stupid".
+    self: the speaker, such as "I'm an idiot".
+    object: a thing or a situation, such as "this stupid printer".
+    none: no harsh target to classify.
+    """
+    raw = "" if text is None else str(text)
+    if re.search(r"\b(you|your|you're|youre|yours|ya|yourself|u)\b", raw, re.I):
+        return "person"
+    if re.search(r"\b(i'm|i am|im|myself)\b", raw, re.I):
+        return "self"
+    if re.search(
+        r"\b(stupid|idiot|dumb|worthless|trash|moron|loser|pathetic|useless|disgusting)\b",
+        raw,
+        re.I,
+    ):
+        return "object"
+    return "none"
+
+
 def _sentences(text):
     parts = re.split(r"(?<=[.!?])\s+", text.strip())
     return [part for part in parts if part.strip()] or [text]
@@ -288,6 +310,11 @@ class SafetyPatternAnalyzer:
         if INSULT.search(sentence) or DIRECTED_PROFANITY.search(sentence):
             if PLAYFUL.search(combined) and re.search(r"\bshut up\b", sentence, re.I) and re.search(r"\blol\b", sentence, re.I):
                 return "WARN"
+            target = address_of(sentence)
+            if target == "self":
+                return "WARN"
+            if target == "object":
+                return "ALLOW"
             return "REWRITE"
         if re.search(
             r"\b(your explanation is confusing|never listen|annoyed|terrible idea|interrupting|"
@@ -295,6 +322,11 @@ class SafetyPatternAnalyzer:
             sentence,
             re.I,
         ):
+            target = address_of(sentence)
+            if target == "object":
+                return "ALLOW"
+            if target == "self":
+                return "WARN"
             return "WARN"
         if re.search(r"\b(oh sure|yeah keep talking|imagine thinking)\b", sentence, re.I):
             return "WARN"

@@ -606,9 +606,15 @@ class SlangInterpreter:
             return True
         stems = []
         for suffix in ("ing", "ed", "es", "ly", "s"):
-            if key.endswith(suffix) and len(key) - len(suffix) >= 3:
-                stem = key[: -len(suffix)]
+            if not key.endswith(suffix):
+                continue
+            stem = key[: -len(suffix)]
+            if len(stem) >= 3:
                 stems.append(stem)
+                stems.append(stem + "e")
+            elif suffix == "ing" and len(stem) >= 2:
+                # "using" is not in the word file, but "use" is.
+                # The two-letter stem itself is not accepted.
                 stems.append(stem + "e")
         if key.endswith("ies") and len(key) - 3 >= 3:
             stems.append(key[:-3] + "y")

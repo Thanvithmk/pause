@@ -19,7 +19,6 @@ from modules.database import (
     get_session,
 )
 from modules.rewrite_engine import RewriteServiceError
-from tests.fixtures import TEST_PASSWORD
 from tests.flow_cases import FLOW_CASES
 
 LABELS = ("toxic", "threat", "insult", "severe_toxic", "obscene", "identity_hate")
@@ -49,9 +48,7 @@ class MessageLifecycleTests(unittest.TestCase):
             ),
         )
         cls.rewrite_patch.start()
-        cls.headers = {
-            "Authorization": f"Bearer {cls._register(cls.client, 'flowuser', 'flowuser@example.com')['token']}"
-        }
+        cls.headers = {}
         cls.metrics = cls._score_catalog()
 
     @classmethod
@@ -59,16 +56,6 @@ class MessageLifecycleTests(unittest.TestCase):
         cls.rewrite_patch.stop()
         services.reset()
         close_session()
-
-    @staticmethod
-    def _register(client, username, email):
-        response = client.post(
-            "/api/auth/register",
-            json={"username": username, "email": email, "password": TEST_PASSWORD},
-        )
-        if response.status_code != 201:
-            raise AssertionError(response.get_json())
-        return response.get_json()
 
     def _analyze(self, text, conversation_id=None, headers=None):
         payload = {"text": text}
@@ -302,34 +289,30 @@ class MessageLifecycleTests(unittest.TestCase):
                 sum(current["delta_vector"]),
             )
 
-    def test_conversations_and_users_do_not_share_previous_vectors(self):
-        other = self._register(self.client, "flowother", "flowother@example.com")
-        other_headers = {"Authorization": f"Bearer {other['token']}"}
+    def test_conversations_do_not_share_previous_vectors(self):
         first_conv = self.client.post("/api/conversations", headers=self.headers).get_json()["conversation"]["conversation_id"]
         second_conv = self.client.post("/api/conversations", headers=self.headers).get_json()["conversation"]["conversation_id"]
         status, first = self._analyze("Thanks for the notes from yesterday.", first_conv)
         self.assertEqual(status, 200, first)
-        status, foreign = self._analyze("I will hurt you after class.", headers=other_headers)
-        self.assertEqual(status, 200, foreign)
+        status, other = self._analyze("I will hurt you after class.", second_conv)
+        self.assertEqual(status, 200, other)
         status, isolated = self._analyze("Thanks for explaining the diagram.", second_conv)
         self.assertEqual(status, 200, isolated)
-        self.assertIsNone(isolated["previous_vector"])
+        self.assertEqual(isolated["previous_vector"], [other["toxicity"][label] for label in LABELS])
         status, follow = self._analyze("I don't agree with this.", first_conv)
         self.assertEqual(status, 200, follow)
         self.assertEqual(follow["previous_vector"], [first["toxicity"][label] for label in LABELS])
         self.assertNotEqual(
             follow["previous_vector"],
-            [foreign["toxicity"][label] for label in LABELS],
+            [other["toxicity"][label] for label in LABELS],
         )
 
     def test_profile_updates_once_on_send_and_not_on_analysis_or_cancel(self):
-        fresh = self._register(self.client, "flowprof", "flowprof@example.com")
-        headers = {"Authorization": f"Bearer {fresh['token']}"}
+        headers = self.headers
         status, body = self._analyze("You never listen to what I'm saying.", headers=headers)
         self.assertEqual(status, 200, body)
         self.assertEqual(body["decision"], "WARN", body)
-        self.assertEqual(body["profile"]["message_count"], 0)
-        self.assertEqual(body["behavioral_baseline"]["toxic"], 0.0)
+        starting_count = body["profile"]["message_count"]
         cancelled = self.client.post(
             "/api/intervention-response",
             json={"message_id": body["message_id"], "user_response": "cancel"},
@@ -340,7 +323,7 @@ class MessageLifecycleTests(unittest.TestCase):
         session = get_session()
         try:
             profile = session.query(BehaviorProfile).filter(BehaviorProfile.user_id == body["profile"]["user_id"]).one()
-            self.assertEqual(profile.message_count, 0)
+            self.assertEqual(profile.message_count, starting_count)
         finally:
             close_session()
         allowed, sent = self._send(body, user_action="send_anyway", headers=headers)
@@ -353,7 +336,7 @@ class MessageLifecycleTests(unittest.TestCase):
         session = get_session()
         try:
             profile = session.query(BehaviorProfile).filter(BehaviorProfile.user_id == body["profile"]["user_id"]).one()
-            self.assertEqual(profile.message_count, 1)
+            self.assertEqual(profile.message_count, starting_count + 1)
             message = session.get(Message, fresh_body["message_id"])
             self.assertTrue(message.profile_updated)
             cancelled_row = session.get(Message, body["message_id"])
@@ -366,7 +349,7 @@ class MessageLifecycleTests(unittest.TestCase):
         session = get_session()
         try:
             profile = session.query(BehaviorProfile).filter(BehaviorProfile.user_id == body["profile"]["user_id"]).one()
-            self.assertEqual(profile.message_count, 1)
+            self.assertEqual(profile.message_count, starting_count + 1)
         finally:
             close_session()
 

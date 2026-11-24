@@ -58,6 +58,8 @@ class DecisionEngine:
         else:
             decision = "DELAYED-SEND"
 
+        banded = decision
+        decision = self._cap_saturated_toxic(decision, toxicity_vector, safety_flags)
         decision, guardrail = self._apply_safety_guardrail(
             decision, toxicity_vector, safety_flags
         )
@@ -68,6 +70,8 @@ class DecisionEngine:
         decision, guardrail = self._apply_contextual_threat(
             decision, guardrail, safety_flags, toxicity_vector
         )
+        if guardrail is None and decision != banded:
+            guardrail = "nonthreat_score"
 
         confidence = self._confidence(score, decision)
         ui = RISK_CATEGORIES[decision]
@@ -259,6 +263,29 @@ class DecisionEngine:
         return round(max(0.0, min(1.0, 1.0 - abs(score - center) / (width / 2.0))), 4)
 
     @staticmethod
+    def _cap_saturated_toxic(decision, toxicity_vector, safety_flags):
+        """A high toxic score is not a reason to delay every message.
+
+        DELAYED-SEND stays for a high threat, severe, or identity score.
+        Anything else is an insult or everyday wording: rewrite a personal
+        insult, warn self-talk, and allow a complaint about a thing.
+        """
+        if decision != "DELAYED-SEND" or not toxicity_vector:
+            return decision
+        toxic = float(toxicity_vector.get("toxic", 0.0) or 0.0)
+        threat = float(toxicity_vector.get("threat", 0.0) or 0.0)
+        severe = float(toxicity_vector.get("severe_toxic", 0.0) or 0.0)
+        identity = float(toxicity_vector.get("identity_hate", 0.0) or 0.0)
+        if toxic < 0.5 or threat >= 0.75 or severe >= 0.70 or identity >= 0.70:
+            return decision
+        address = (safety_flags or {}).get("address") or "none"
+        if address == "object":
+            return "ALLOW"
+        if address == "self":
+            return "WARN"
+        return "REWRITE"
+
+    @staticmethod
     def _apply_safety_guardrail(decision, toxicity_vector, safety_flags):
         """Escalate from 6-D features. Does not change R.
 
@@ -298,6 +325,9 @@ class DecisionEngine:
             return decision, guardrail
         rank = {name: index for index, name in enumerate(DECISION_ORDER)}
         if rank[safety_label] > rank[decision]:
+            # A WARN risk score stays WARN. The pattern must not relabel it as delayed send.
+            if decision == "WARN" and safety_label == "DELAYED-SEND":
+                return decision, guardrail
             reason = f"safety_pattern:{safety_label}"
             return safety_label, reason if not guardrail else f"{guardrail}+{reason}"
         return decision, guardrail

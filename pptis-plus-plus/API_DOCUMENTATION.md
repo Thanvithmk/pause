@@ -1,84 +1,8 @@
-# PPTIS++ API reference
+# Pause API reference
 
 Base URL (local): `http://localhost:5000`
 
-JSON unless noted. Authenticated routes send:
-
-```
-Authorization: Bearer <access_token>
-```
-
-Access tokens are JWTs (HS256), type `access`, valid **7 days**. Refresh tokens use type `refresh`. Login lockout: **5** failed attempts, then **15 minutes** (in-memory, per IP + identifier).
-
----
-
-## Authentication
-
-### POST `/api/auth/register`
-
-Also available as `POST /auth/register`.
-
-**Request**
-
-```json
-{
-  "username": "alexsafe",
-  "email": "alex@example.com",
-  "password": "TestPass1!"
-}
-```
-
-Username: alphanumeric, 3–20 chars. Password: 8+ chars, uppercase, digit, special character.
-
-**201**
-
-```json
-{
-  "user_id": 1,
-  "token": "<jwt>",
-  "user": {
-    "user_id": 1,
-    "username": "alexsafe",
-    "email": "alex@example.com",
-    "created_at": "2026-11-01T08:00:00+00:00"
-  }
-}
-```
-
-**400** validation, **409** duplicate username/email.
-
-### POST `/api/auth/login`
-
-Also `POST /auth/login`.
-
-**Request** — `email`, `username`, or `identifier` plus `password`.
-
-```json
-{
-  "email": "alex@example.com",
-  "password": "TestPass1!"
-}
-```
-
-**200** — `user_id`, `token`, `refresh_token`, `user`.
-
-**401** invalid credentials, **429** too many failures.
-
-### POST `/auth/logout`
-
-Blacklists the current JWT `jti`. **401** if missing/expired.
-
-### POST `/auth/refresh`
-
-Body optional: `{ "refresh_token": "..." }` or Bearer refresh token. Returns a new access + refresh pair. Old refresh is revoked.
-
-### POST `/auth/password-reset`
-
-`{ "email": "alex@example.com" }`. Always **200** with a generic message. In `FLASK_ENV=development` the response may include `reset_token`.
-
-### POST `/auth/password-reset/confirm`
-
-`{ "token": "<reset jwt>", "password": "NewPass1!" }` → `{ "message": "Password updated" }`.
+JSON unless noted. Pause does not use login tokens. Requests are stored on one local profile named `pause`.
 
 ---
 
@@ -86,7 +10,7 @@ Body optional: `{ "refresh_token": "..." }` or Bearer refresh token. Returns a n
 
 ### POST `/api/analyze`
 
-**Auth required.** Validates conversation ownership when `conversation_id` is sent.
+`conversation_id` is checked against the local profile.
 
 **Request**
 
@@ -146,7 +70,7 @@ Pipeline: preprocess → slang disambiguation → toxicity `X_t` → PACL (`λ =
 
 REWRITE adds `rewrite.suggested_text` (no send-original). DELAYED-SEND adds `delayed_send.lock_id` and `countdown_seconds` (default 5).
 
-**400** missing text, **401** no/invalid token, **403** conversation not owned, **404** conversation missing, **500** model/storage failure.
+**400** missing text, **403** conversation not owned, **404** conversation missing, **500** model/storage failure.
 
 ---
 
@@ -206,29 +130,20 @@ Owner only.
 }
 ```
 
-Auth failures use `"error": "auth_error"`. Flask also maps:
+Flask maps:
 
 | Code | When |
 |---|---|
 | 400 | Bad JSON, validation, failed transcription |
-| 401 | Missing/expired/revoked JWT, bad password |
 | 403 | Conversation not owned |
 | 404 | Missing conversation/resource |
 | 405 | Wrong HTTP method |
-| 429 | Login rate limit |
 | 500 | Unhandled / model / database |
-
----
-
-## Rate limiting
-
-Implemented for **failed logins only** (5 attempts, 15 minute lock). Analyze routes are not rate-limited in application code; cap them at the reverse proxy if needed.
 
 ---
 
 ## Notes
 
-- Tokens: put `Authorization: Bearer` on every analyze/profile/dashboard/conversation call.
 - First-message CEL uses `E = 0` and a zero `ΔX`.
 - `λ` and `α` are not client-configurable.
 - There is no API to send a blocked message without re-analysis.

@@ -73,15 +73,9 @@ def _configure_cors(app):
 
 def register_blueprints(app):
     from api.routes import ApiError, api_bp
-    from modules.auth import AuthError, auth_bp
     from modules.send_gateway import SendError
 
-    app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(api_bp, url_prefix="/api")
-
-    @app.errorhandler(AuthError)
-    def handle_auth_error(error):
-        return jsonify({"error": "auth_error", "message": error.message}), error.status_code
 
     @app.errorhandler(ApiError)
     def handle_api_error(error):

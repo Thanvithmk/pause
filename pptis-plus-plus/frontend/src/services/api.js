@@ -1,45 +1,9 @@
 import axios from "axios";
 
-const TOKEN_KEY = "pptis_token";
-
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000",
   timeout: 60000,
 });
-
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token) {
-  if (token) {
-    localStorage.setItem(TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
-  }
-}
-
-export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
-}
-
-api.interceptors.request.use((config) => {
-  const token = getToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      clearToken();
-    }
-    return Promise.reject(error);
-  }
-);
 
 export async function analyzeText(text, conversationId) {
   const payload = { text };
@@ -97,40 +61,6 @@ export async function getDashboard(days = 30) {
 export async function getProfile() {
   const { data } = await api.get("/api/user/profile");
   return data;
-}
-
-export async function login(identifier, password) {
-  const { data } = await api.post("/api/auth/login", {
-    identifier,
-    email: identifier,
-    username: identifier,
-    password,
-  });
-  if (data.token) {
-    setToken(data.token);
-  }
-  return data;
-}
-
-export async function register(username, email, password) {
-  const { data } = await api.post("/api/auth/register", {
-    username,
-    email,
-    password,
-  });
-  if (data.token) {
-    setToken(data.token);
-  }
-  return data;
-}
-
-export async function logout() {
-  try {
-    await api.post("/api/auth/logout");
-  } catch {
-    /* token is cleared locally even if the server is unreachable */
-  }
-  clearToken();
 }
 
 export default api;

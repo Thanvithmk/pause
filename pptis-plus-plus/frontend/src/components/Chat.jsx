@@ -373,7 +373,7 @@ function Chat({ user }) {
   const suggested =
     analysis?.suggested_text || analysis?.rewrite?.suggested_text || analysis?.action?.suggested_text;
   const exercises = analysis?.delayed_send?.exercises || FALLBACK_EXERCISES;
-  const initial = (user?.username || user?.email || "Y").trim().charAt(0).toUpperCase();
+  const initial = (user?.username || user?.email || "P").trim().charAt(0).toUpperCase();
   const clock = formatRemaining(remainingSeconds);
 
   async function copySuggestion() {

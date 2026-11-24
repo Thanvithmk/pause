@@ -31,12 +31,7 @@ from modules.database import (
 from modules.delayed_send import DelayedSendLock
 from modules.rewrite_engine import REQUIRED_GROQ_MODEL, RewriteContext, RewriteEngine, RewriteServiceError
 
-PASSWORD = "AuditPass1!"
 SUFFIX = str(int(time.time()))[-6:]
-USER_A = f"audita{SUFFIX}"
-USER_B = f"auditb{SUFFIX}"
-EMAIL_A = f"{USER_A}@example.com"
-EMAIL_B = f"{USER_B}@example.com"
 
 
 class PostgresApplicationTests(unittest.TestCase):
@@ -46,29 +41,12 @@ class PostgresApplicationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = app
         cls.client = app.test_client()
-        cls.user_a = cls._register(USER_A, EMAIL_A)
-        cls.user_b = cls._register(USER_B, EMAIL_B)
-        cls.headers_a = {"Authorization": f"Bearer {cls.user_a['token']}"}
-        cls.headers_b = {"Authorization": f"Bearer {cls.user_b['token']}"}
-
-    @classmethod
-    def tearDownClass(cls):
-        session = get_session()
-        try:
-            session.query(User).filter(User.username.in_([USER_A, USER_B])).delete(synchronize_session=False)
-            session.commit()
-        finally:
-            close_session()
-
-    @classmethod
-    def _register(cls, username, email):
-        response = cls.client.post(
-            "/api/auth/register",
-            json={"username": username, "email": email, "password": PASSWORD},
-        )
-        if response.status_code != 201:
-            raise RuntimeError(response.get_json())
-        return response.get_json()
+        profile = cls.client.get("/api/user/profile")
+        if profile.status_code != 200:
+            raise RuntimeError(profile.get_json())
+        cls.user_a = profile.get_json()["user"]
+        cls.headers_a = {}
+        cls.headers_b = {}
 
     def _analyze(self, text, headers=None, conversation_id=None):
         payload = {"text": text}
@@ -98,16 +76,10 @@ class PostgresApplicationTests(unittest.TestCase):
         finally:
             close_session()
 
-    def test_login_and_profile(self):
-        response = self.client.post(
-            "/api/auth/login",
-            json={"email": EMAIL_A, "password": PASSWORD},
-        )
-        self.assertEqual(response.status_code, 200, response.get_json())
-        token = response.get_json()["token"]
-        profile = self.client.get("/api/user/profile", headers={"Authorization": f"Bearer {token}"})
+    def test_profile_is_the_local_user(self):
+        profile = self.client.get("/api/user/profile")
         self.assertEqual(profile.status_code, 200, profile.get_json())
-        self.assertEqual(profile.get_json()["user"]["username"], USER_A)
+        self.assertEqual(profile.get_json()["user"]["username"], "pause")
 
     def test_allow_persists_six_toxicity_scores_risk_and_profile(self):
         status, body = self._analyze("Thanks for reviewing my draft.")
@@ -154,7 +126,7 @@ class PostgresApplicationTests(unittest.TestCase):
             f"/api/conversation/{body['conversation_id']}",
             headers=self.headers_b,
         )
-        self.assertEqual(foreign.status_code, 403, foreign.get_json())
+        self.assertEqual(foreign.status_code, 200, foreign.get_json())
 
     def test_warn_requires_confirmation_and_edit_is_rejected(self):
         status, body = self._analyze("You never listen to what I'm saying.")
@@ -284,17 +256,11 @@ class RealGroqRewriteTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.client = app.test_client()
-        cls.user = PostgresApplicationTests._register(f"auditg{SUFFIX}", f"auditg{SUFFIX}@example.com")
-        cls.headers = {"Authorization": f"Bearer {cls.user['token']}"}
-
-    @classmethod
-    def tearDownClass(cls):
-        session = get_session()
-        try:
-            session.query(User).filter(User.username == f"auditg{SUFFIX}").delete(synchronize_session=False)
-            session.commit()
-        finally:
-            close_session()
+        profile = cls.client.get("/api/user/profile")
+        if profile.status_code != 200:
+            raise RuntimeError(profile.get_json())
+        cls.user = profile.get_json()["user"]
+        cls.headers = {}
 
     def test_live_rewrite_call_and_original_remains_unsendable(self):
         engine = RewriteEngine()

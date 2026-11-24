@@ -9,28 +9,13 @@ os.environ["FLASK_ENV"] = "testing"
 from api.routes import services
 from app import create_app
 from modules.database import RiskResult, close_session, get_session
-from tests.fixtures import TEST_PASSWORD
-
-
 class SendPolicyTests(unittest.TestCase):
     def setUp(self):
         services.reset()
         self.app = create_app("testing")
         self.app.config["TESTING"] = True
         self.client = self.app.test_client()
-        register = self.client.post(
-            "/api/auth/register",
-            json={
-                "username": "senduser",
-                "email": "senduser@example.com",
-                "password": TEST_PASSWORD,
-            },
-        )
-        self.assertEqual(register.status_code, 201, register.get_json())
-        body = register.get_json()
-        self.token = body["token"]
-        self.user_id = body["user_id"]
-        self.headers = {"Authorization": f"Bearer {self.token}"}
+        self.headers = {}
 
     def tearDown(self):
         services.reset()
@@ -100,7 +85,7 @@ class SendPolicyTests(unittest.TestCase):
         manager = services.delayed
         manager.create_delayed_send_state(
             analysis["message_id"],
-            self.user_id,
+            analysis["profile"]["user_id"],
             analysis["original_text"],
             0.9,
             conversation_id=analysis["conversation_id"],

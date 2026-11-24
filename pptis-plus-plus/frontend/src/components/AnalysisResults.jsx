@@ -67,8 +67,9 @@ function AnalysisResults({ analysis, analyzing = false }) {
         {analysis.mathematical_decision && analysis.mathematical_decision !== decision && (
           <p className="mt-2 text-xs text-slate-500">
             Mathematical risk is {analysis.mathematical_decision}.{" "}
-            {String(analysis.guardrail || "").includes("contextual_threat")
-              ? "The contextual threat assessment lowered the intervention. Toxic-BERT scores and final risk were not changed."
+            {["ALLOW", "WARN", "REWRITE", "DELAYED-SEND"].indexOf(decision) <
+            ["ALLOW", "WARN", "REWRITE", "DELAYED-SEND"].indexOf(analysis.mathematical_decision)
+              ? "That number is not a threat aimed at a person, so the message is not delayed."
               : String(analysis.guardrail || "").includes("playful_emoji")
               ? "Laughter emoji lowered the intervention. Final risk was not changed."
               : `A separate safety guardrail raised the intervention${

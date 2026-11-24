@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from flask import Blueprint, current_app, g, jsonify, request
 from sqlalchemy import func
 
-from modules.auth import AuthError, login_user, register_user, require_auth
 from modules.database import (
     Conversation,
     InterventionLog,
@@ -18,6 +17,8 @@ from modules.database import (
     utcnow,
 )
 from modules.contextual_threat import assess
+from modules.local_user import get_local_user
+from modules.safety_patterns import address_of
 from modules.linguistic_features import (
     annotate_slang_usage,
     emoji_annotations,
@@ -32,6 +33,24 @@ from modules.toxicity_model import ToxicityAnalysisError
 logger = logging.getLogger(__name__)
 
 api_bp = Blueprint("api", __name__)
+
+
+class _LocalAccount:
+    def __init__(self, user_id, payload):
+        self.user_id = user_id
+        self._payload = payload
+
+    def to_dict(self):
+        return dict(self._payload)
+
+
+@api_bp.before_request
+def attach_local_user():
+    if request.method == "OPTIONS":
+        return None
+    user_id, payload = get_local_user()
+    g.current_user_id = user_id
+    g.current_user = _LocalAccount(user_id, payload)
 
 CEL_LABELS = ("toxic", "threat", "insult", "severe_toxic", "obscene", "identity_hate")
 
@@ -190,36 +209,6 @@ def handle_api_error(error):
     return jsonify({"error": "api_error", "message": error.message}), error.status_code
 
 
-@api_bp.errorhandler(AuthError)
-def handle_auth_error(error):
-    return jsonify({"error": "auth_error", "message": error.message}), error.status_code
-
-
-@api_bp.route("/auth/register", methods=["POST"])
-def register():
-    body = request.get_json(silent=True) or {}
-    logger.info("API register username=%s", body.get("username"))
-    result = register_user(body.get("username"), body.get("email"), body.get("password"))
-    return jsonify(result), 201
-
-
-@api_bp.route("/auth/login", methods=["POST"])
-def login():
-    body = request.get_json(silent=True) or {}
-    identifier = body.get("email") or body.get("username") or body.get("identifier")
-    logger.info("API login identifier=%s", identifier)
-    result = login_user(identifier, body.get("password"))
-    return jsonify(result), 200
-
-
-@api_bp.route("/auth/logout", methods=["POST"])
-@require_auth
-def logout():
-    from modules.auth import logout_user
-
-    return jsonify(logout_user()), 200
-
-
 @api_bp.errorhandler(SendError)
 def handle_send_error(error):
     logger.warning("Send rejected %s %s", error.status_code, error.message)
@@ -243,7 +232,6 @@ def health():
 
 
 @api_bp.route("/analyze", methods=["POST"])
-@require_auth
 def analyze():
     body = request.get_json(silent=True) or {}
     text = (body.get("text") or body.get("original_text") or "").strip()
@@ -265,7 +253,6 @@ def analyze():
 
 
 @api_bp.route("/send", methods=["POST"])
-@require_auth
 def send_message():
     body = request.get_json(silent=True) or {}
     try:
@@ -293,7 +280,6 @@ def send_message():
 
 
 @api_bp.route("/delayed-send/<int:message_id>", methods=["GET"])
-@require_auth
 def delayed_send_status(message_id):
     delayed = services.delayed
     if delayed is None:
@@ -314,7 +300,6 @@ def delayed_send_status(message_id):
 
 
 @api_bp.route("/user/profile", methods=["GET"])
-@require_auth
 def user_profile():
     user_id = g.current_user_id
     logger.info("Profile user_id=%s", user_id)
@@ -348,7 +333,6 @@ def user_profile():
 
 
 @api_bp.route("/dashboard", methods=["GET"])
-@require_auth
 def dashboard():
     user_id = g.current_user_id
     days = int(request.args.get("days", 30))
@@ -499,7 +483,6 @@ def dashboard():
 
 
 @api_bp.route("/intervention-response", methods=["POST"])
-@require_auth
 def intervention_response():
     body = request.get_json(silent=True) or {}
     try:
@@ -576,14 +559,12 @@ def intervention_response():
 
 
 @api_bp.route("/conversations", methods=["POST"])
-@require_auth
 def create_conversation():
     conversation = _get_or_create_conversation(g.current_user_id, None)
     return jsonify({"conversation": conversation.to_dict()}), 201
 
 
 @api_bp.route("/conversations", methods=["GET"])
-@require_auth
 def list_conversations():
     session = get_session()
     try:
@@ -599,7 +580,6 @@ def list_conversations():
 
 
 @api_bp.route("/conversation/<int:conversation_id>", methods=["GET"])
-@require_auth
 def get_conversation(conversation_id):
     session = get_session()
     try:
@@ -750,6 +730,7 @@ def run_analysis_pipeline(
             "playful_idiom": toxicity_detail.get("playful_idiom"),
             "playful_emoji": has_playful_laughter(linguistic_features.get("emoji")),
             "contextual_threat": contextual,
+            "address": address_of(cleaned),
         }
         mathematical_decision = risk_calc.get_risk_category(final_risk)[0]
         decision = decisions.make_decision(

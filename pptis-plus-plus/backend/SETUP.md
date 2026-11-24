@@ -1,4 +1,4 @@
-# PPTIS++ backend setup
+# Pause backend setup
 
 Python 3.11+ is recommended. Run commands from `pptis-plus-plus/backend` unless noted.
 
@@ -8,7 +8,7 @@ Python 3.11+ is recommended. Run commands from `pptis-plus-plus/backend` unless 
 cd backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install flask flask-cors python-dotenv PyJWT werkzeug sqlalchemy psycopg2-binary
+pip install flask flask-cors python-dotenv werkzeug sqlalchemy psycopg2-binary
 pip install numpy scikit-learn torch transformers groq
 ```
 
@@ -39,7 +39,6 @@ Copy `backend/.env.example` to `backend/.env` and edit values.
 |---|---|---|
 | `FLASK_ENV` | `development` / `production` | `production` |
 | `SECRET_KEY` | Flask sessions | `change-me` |
-| `JWT_SECRET_KEY` | JWT signing | `change-me-jwt` |
 | `DATABASE_URL` | PostgreSQL URI | required |
 | `CORS_ORIGINS` | Allowed frontend origins | `http://localhost:3000` |
 | `GROQ_API_KEY` | Groq rewrite key | required |
@@ -60,61 +59,26 @@ Listens on `0.0.0.0:5000` by default (`HOST`, `PORT`). Startup loads `xlm-robert
 
 ## API endpoints
 
-Prefix `/api` is registered in `app.py`. Legacy auth also exists at `/auth/*`.
+Prefix `/api` is registered in `app.py`. There is no login. Calls are stored on the local `pause` profile.
 
-| Method | Path | Auth |
-|---|---|---|
-| POST | `/api/auth/register` | no |
-| POST | `/api/auth/login` | no |
-| POST | `/auth/logout` | bearer |
-| POST | `/auth/refresh` | refresh token |
-| POST | `/api/analyze` | bearer |
-| GET | `/api/user/profile` | bearer |
-| GET | `/api/dashboard?days=30` | bearer |
-| GET | `/api/conversation/<id>` | bearer (owner) |
+| Method | Path |
+|---|---|
+| POST | `/api/analyze` |
+| GET | `/api/user/profile` |
+| GET | `/api/dashboard?days=30` |
+| GET | `/api/conversation/<id>` |
 
 See [API_DOCUMENTATION.md](../API_DOCUMENTATION.md) for the full reference.
 
-## Example requests
-
-Register:
-
-```bash
-curl -s http://localhost:5000/api/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"alexsafe","email":"alex@example.com","password":"TestPass1!"}'
-```
-
-Response (201):
-
-```json
-{
-  "user_id": 1,
-  "token": "<jwt>",
-  "user": { "username": "alexsafe", "email": "alex@example.com" }
-}
-```
-
-Login:
-
-```bash
-curl -s http://localhost:5000/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"alex@example.com","password":"TestPass1!"}'
-```
-
-Analyze text:
+## Example request
 
 ```bash
 curl -s http://localhost:5000/api/analyze \
-  -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"text":"Bro you are cooked","input_type":"text"}'
 ```
 
 Response includes `toxicity`, `pacl`, `escalation_probability`, `final_risk`, `decision`, and optional `rewrite` / `delayed_send`.
-
-Password rules: 8+ characters, one uppercase letter, one digit, one special character. Usernames are alphanumeric, 3–20 characters.
 
 ## Tests
 

@@ -1,4 +1,4 @@
-# PPTIS++
+# Pause
 
 The application always loads the Master Plan models. It does not switch to a smaller model when one of them fails.
 

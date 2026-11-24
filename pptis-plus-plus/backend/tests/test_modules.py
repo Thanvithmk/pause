@@ -4,12 +4,10 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from flask import Flask
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from modules.auth import AuthError, decode_token, login_user, register_user
 from modules.database import Conversation, Message, User, close_session, get_session
+from modules.local_user import LOCAL_USERNAME, get_local_user
 from modules.decision_engine import DecisionEngine
 from modules.delayed_send import DelayedSendManager
 from modules.preprocessing import Preprocessor
@@ -21,7 +19,6 @@ from tests.fixtures import (
     PREVIOUS_VECTOR,
     SAFE_VECTOR,
     SLANG_TEXT,
-    TEST_PASSWORD,
     TOXIC_VECTOR,
     init_test_db,
     seed_conversation,
@@ -31,27 +28,20 @@ from tests.fixtures import (
 )
 
 
-class AuthModuleTests(unittest.TestCase):
+class LocalUserTests(unittest.TestCase):
     def setUp(self):
         init_test_db()
-        self.app = Flask(__name__)
 
     def tearDown(self):
         close_session()
 
-    def test_register_login_and_jwt(self):
-        registered = register_user("alexsafe", "alex@example.com", TEST_PASSWORD)
-        self.assertIn("user_id", registered)
-        payload = decode_token(registered["token"], expected_type="access")
-        self.assertEqual(str(registered["user_id"]), payload["sub"])
-        with self.app.test_request_context():
-            logged_in = login_user("alex@example.com", TEST_PASSWORD)
-        self.assertEqual(logged_in["user_id"], registered["user_id"])
-        self.assertTrue(logged_in["token"])
-
-    def test_register_rejects_weak_password(self):
-        with self.assertRaises(AuthError):
-            register_user("baduser", "bad@example.com", "weak")
+    def test_local_profile_is_reused_without_a_token(self):
+        first_id, first = get_local_user()
+        second_id, second = get_local_user()
+        self.assertEqual(first_id, second_id)
+        self.assertEqual(first["username"], LOCAL_USERNAME)
+        self.assertEqual(second["username"], LOCAL_USERNAME)
+        self.assertNotIn("password_hash", first)
 
 
 class PreprocessingModuleTests(unittest.TestCase):
@@ -129,6 +119,21 @@ class SlangModuleTests(unittest.TestCase):
         self.assertIn("[Contextual meaning:", result["enriched_text_with_context"])
         self.assertTrue(result["enriched_text_with_context"].startswith(SLANG_TEXT))
 
+    def test_using_is_ordinary_english(self):
+        self.assertTrue(self.interpreter._is_known_english("using"))
+        self.assertTrue(self.interpreter._is_known_english("making"))
+        self.assertFalse(self.interpreter._is_known_english("glorped"))
+        self.assertFalse(self.interpreter._is_known_english("oxing"))
+        unknown = [
+            token.lower()
+            for token, _pos in self.interpreter._unknown_tokens(
+                "I want to cut an apple using your knife.", []
+            )
+        ]
+        self.assertNotIn("using", unknown)
+        self.assertNotIn("apple", unknown)
+        self.assertNotIn("knife", unknown)
+
     def test_unknown_glorped_is_not_treated_as_toxic_slang(self):
         result = self.interpreter.interpret("Bro is completely glorped.")
         self.assertEqual(result["enriched_text_with_context"], "Bro is completely glorped.")
@@ -198,6 +203,34 @@ class DecisionEngineTests(unittest.TestCase):
         self.engine.T_allow = 0.30
         self.engine.T_warn = 0.55
         self.engine.T_rewrite = 0.80
+
+    def test_high_toxic_score_follows_the_target(self):
+        vector = {"toxic": 0.9, "threat": 0.04, "severe_toxic": 0.01, "identity_hate": 0.0}
+        object_line = self.engine.make_decision(
+            0.865, toxicity_vector=vector, safety_flags={"address": "object"}, safety_label="ALLOW"
+        )
+        self.assertEqual(object_line["decision"], "ALLOW")
+        personal = self.engine.make_decision(
+            0.865, toxicity_vector=vector, safety_flags={"address": "person"}, safety_label="WARN"
+        )
+        self.assertEqual(personal["decision"], "REWRITE")
+        self_talk = self.engine.make_decision(
+            0.865, toxicity_vector=vector, safety_flags={"address": "self"}, safety_label="WARN"
+        )
+        self.assertEqual(self_talk["decision"], "WARN")
+        threat = self.engine.make_decision(
+            0.865,
+            toxicity_vector={"toxic": 0.73, "threat": 0.45, "severe_toxic": 0.02, "identity_hate": 0.0},
+            safety_flags={"address": "person"},
+            safety_label="DELAYED-SEND",
+        )
+        self.assertEqual(threat["decision"], "DELAYED-SEND")
+
+    def test_warn_risk_is_not_relabeled_delayed_send(self):
+        result = self.engine.make_decision(0.45, safety_label="DELAYED-SEND")
+        self.assertEqual(result["decision"], "WARN")
+        self.assertEqual(result["risk_score"], 0.45)
+        self.assertIsNone(result["guardrail"])
 
     def test_all_thresholds(self):
         self.assertEqual(self.engine.make_decision(0.10)["decision"], "ALLOW")

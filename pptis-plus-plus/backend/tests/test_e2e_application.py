@@ -15,31 +15,18 @@ REWRITE_INFERENCE = "mocked"
 from api.routes import services
 from app import create_app
 from modules.database import Feedback, Message, RiskResult, close_session, get_session
-from tests.fixtures import TEST_PASSWORD
-
-
 class EndToEndApplicationTests(unittest.TestCase):
     def setUp(self):
         services.reset()
         self.app = create_app("testing")
         self.app.config["TESTING"] = True
         self.client = self.app.test_client()
-        self.user_a = self._register("e2ealpha", "e2ealpha@example.com")
-        self.headers_a = {"Authorization": f"Bearer {self.user_a['token']}"}
 
     def tearDown(self):
         services.reset()
         close_session()
 
-    def _register(self, username, email):
-        response = self.client.post(
-            "/api/auth/register",
-            json={"username": username, "email": email, "password": TEST_PASSWORD},
-        )
-        self.assertEqual(response.status_code, 201, response.get_json())
-        return response.get_json()
-
-    def _analyze(self, text, conversation_id=None, headers=None):
+    def _analyze(self, text, conversation_id=None):
         payload = {"text": text}
         if conversation_id:
             payload["conversation_id"] = conversation_id
@@ -47,12 +34,10 @@ class EndToEndApplicationTests(unittest.TestCase):
             "modules.rewrite_engine.RewriteEngine._complete_groq",
             return_value="I want to discuss this more calmly.",
         ):
-            response = self.client.post(
-                "/api/analyze", json=payload, headers=headers or self.headers_a
-            )
+            response = self.client.post("/api/analyze", json=payload)
         return response.status_code, response.get_json()
 
-    def _send(self, analysis, text=None, user_action="send", headers=None):
+    def _send(self, analysis, text=None, user_action="send"):
         response = self.client.post(
             "/api/send",
             json={
@@ -61,16 +46,15 @@ class EndToEndApplicationTests(unittest.TestCase):
                 "text": text if text is not None else analysis["original_text"],
                 "user_action": user_action,
             },
-            headers=headers or self.headers_a,
         )
         return response.status_code, response.get_json()
 
-    def test_unauthenticated_analyze_rejected(self):
+    def test_analyze_works_without_a_token(self):
         response = self.client.post("/api/analyze", json={"text": "hello"})
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 200, response.get_json())
 
     def test_register_conversation_allow_send_and_history(self):
-        created = self.client.post("/api/conversations", headers=self.headers_a)
+        created = self.client.post("/api/conversations")
         self.assertEqual(created.status_code, 201, created.get_json())
         conversation_id = created.get_json()["conversation"]["conversation_id"]
 
@@ -84,12 +68,12 @@ class EndToEndApplicationTests(unittest.TestCase):
         self.assertEqual(send_status, 200, sent)
         self.assertTrue(sent["sent"])
 
-        listed = self.client.get("/api/conversations", headers=self.headers_a)
+        listed = self.client.get("/api/conversations")
         self.assertEqual(listed.status_code, 200)
         ids = [row["conversation_id"] for row in listed.get_json()["conversations"]]
         self.assertIn(conversation_id, ids)
 
-        thread = self.client.get(f"/api/conversation/{conversation_id}", headers=self.headers_a)
+        thread = self.client.get(f"/api/conversation/{conversation_id}")
         self.assertEqual(thread.status_code, 200)
         messages = thread.get_json()["messages"]
         self.assertGreaterEqual(len(messages), 1)
@@ -103,12 +87,16 @@ class EndToEndApplicationTests(unittest.TestCase):
         self.assertTrue(analysis["analysis_complete"])
         self.assertEqual(analysis["inference"]["toxicity"], "actual")
         self.assertEqual(analysis["mathematical_decision"], _band(analysis["final_risk"]))
-        if analysis.get("guardrail"):
+        ranks = ("ALLOW", "WARN", "REWRITE", "DELAYED-SEND")
+        if analysis.get("guardrail") and not any(
+            token in str(analysis.get("guardrail"))
+            for token in ("nonthreat_score", "contextual_threat", "playful_emoji")
+        ):
             self.assertGreater(
-                ("ALLOW", "WARN", "REWRITE", "DELAYED-SEND").index(analysis["decision"]),
-                ("ALLOW", "WARN", "REWRITE", "DELAYED-SEND").index(analysis["mathematical_decision"]),
+                ranks.index(analysis["decision"]),
+                ranks.index(analysis["mathematical_decision"]),
             )
-        else:
+        elif not analysis.get("guardrail"):
             self.assertEqual(analysis["decision"], _band(analysis["final_risk"]))
         if analysis["decision"] == "WARN":
             blocked, body = self._send(analysis)
@@ -155,27 +143,17 @@ class EndToEndApplicationTests(unittest.TestCase):
         self.assertIn("pacl", analysis)
         self.assertIn("final_risk", analysis)
 
-    def test_cross_user_conversation_and_delayed_status(self):
+    def test_conversation_is_readable_without_a_token(self):
         _, analysis = self._analyze("I will hurt you after class.")
-        other = self._register("e2ebravo", "e2ebravo@example.com")
-        headers_b = {"Authorization": f"Bearer {other['token']}"}
-        stolen = self.client.get(
-            f"/api/conversation/{analysis['conversation_id']}",
-            headers=headers_b,
-        )
-        self.assertEqual(stolen.status_code, 403)
-        lock = self.client.get(
-            f"/api/delayed-send/{analysis['message_id']}",
-            headers=headers_b,
-        )
-        self.assertEqual(lock.status_code, 403)
-        send_other, body = self._send(analysis, headers=headers_b)
-        self.assertIn(send_other, (403, 404), body)
+        opened = self.client.get(f"/api/conversation/{analysis['conversation_id']}")
+        self.assertEqual(opened.status_code, 200, opened.get_json())
+        lock = self.client.get(f"/api/delayed-send/{analysis['message_id']}")
+        self.assertEqual(lock.status_code, 200, lock.get_json())
 
     def test_dashboard_uses_stored_records(self):
         _, analysis = self._analyze("Thanks a lot for the notes.")
         self._send(analysis)
-        dash = self.client.get("/api/dashboard", headers=self.headers_a)
+        dash = self.client.get("/api/dashboard")
         self.assertEqual(dash.status_code, 200, dash.get_json())
         payload = dash.get_json()
         self.assertGreaterEqual(payload["messages_analyzed"], 1)
@@ -187,14 +165,8 @@ class EndToEndApplicationTests(unittest.TestCase):
         self.assertGreaterEqual(len(payload["recent_activity"]), 1)
         self.assertIn("send_status", payload["recent_activity"][0])
 
-    def test_logout_revokes_token(self):
-        logout = self.client.post("/api/auth/logout", headers=self.headers_a)
-        self.assertEqual(logout.status_code, 200, logout.get_json())
-        after = self.client.get("/api/user/profile", headers=self.headers_a)
-        self.assertEqual(after.status_code, 401)
-
     def test_single_conversation_demonstration(self):
-        created = self.client.post("/api/conversations", headers=self.headers_a)
+        created = self.client.post("/api/conversations")
         self.assertEqual(created.status_code, 201, created.get_json())
         conversation_id = created.get_json()["conversation"]["conversation_id"]
 
@@ -234,7 +206,11 @@ class EndToEndApplicationTests(unittest.TestCase):
         self.assertGreater(third["escalation_feature"], second["escalation_feature"])
         self.assertGreater(third["final_risk"], second["final_risk"])
         self.assertIn(third["decision"], ("REWRITE", "DELAYED-SEND"))
-        self.assertEqual(third["decision"], _band(third["final_risk"]))
+        if third.get("guardrail") == "nonthreat_score":
+            self.assertEqual(third["mathematical_decision"], "DELAYED-SEND")
+            self.assertEqual(third["decision"], "REWRITE")
+        else:
+            self.assertEqual(third["decision"], _band(third["final_risk"]))
         blocked, blocked_body = self._send(third)
         self.assertEqual(blocked, 403, blocked_body)
 
@@ -274,7 +250,6 @@ class EndToEndApplicationTests(unittest.TestCase):
         response = self.client.post(
             "/api/send",
             json={"message_id": 999999, "conversation_id": 1, "text": "hi"},
-            headers=self.headers_a,
         )
         self.assertIn(response.status_code, (403, 404, 422))
 

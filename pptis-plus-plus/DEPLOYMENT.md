@@ -1,4 +1,4 @@
-# PPTIS++ deployment
+# Pause deployment
 
 Use [backend/SETUP.md](backend/SETUP.md) and [frontend/SETUP.md](frontend/SETUP.md) for local install. This document covers production.
 
@@ -13,7 +13,7 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY backend /app
-RUN pip install --no-cache-dir flask flask-cors python-dotenv PyJWT werkzeug sqlalchemy \
+RUN pip install --no-cache-dir flask flask-cors python-dotenv werkzeug sqlalchemy \
     psycopg2-binary numpy scikit-learn torch transformers groq gunicorn
 ENV FLASK_ENV=production
 EXPOSE 5000
@@ -57,12 +57,12 @@ Backup `slang_dictionary` and `behavior_profiles` before schema changes. There i
 
 Never commit `.env`. Inject at runtime:
 
-- `SECRET_KEY`, `JWT_SECRET_KEY` — long random values (32+ bytes)
+- `SECRET_KEY` — a long random value (32+ bytes)
 - `DATABASE_URL` / `POSTGRES_PASSWORD`
 - `GROQ_API_KEY`
 - `SMTP_*` if password reset email is enabled
 
-Use a secrets manager (AWS Secrets Manager, GCP Secret Manager, Doppler, or systemd `EnvironmentFile` with `0600` perms). Rotate JWT secrets only with a planned logout of all sessions (tokens last 7 days).
+Use a secrets manager (AWS Secrets Manager, GCP Secret Manager, Doppler, or systemd `EnvironmentFile` with `0600` perms).
 
 ## SSL/TLS
 
@@ -98,4 +98,4 @@ Trained logistic params persist in `backend/escalation_logistic.json`. Back that
 - **Frontend:** static files scale independently of the API.
 - **Fixed constants:** do not tune `λ` or `α` per instance; they must stay identical everywhere. Only `b`, `w_E`, `w_P` change after RIL retraining.
 
-Horizontal scale: sticky sessions are unnecessary (JWT is stateless). Token blacklist is in-memory; logout will not replicate across processes unless you replace it with Redis.
+Horizontal scale: the API does not keep a login session.

@@ -84,6 +84,45 @@ class ContextualReadingTests(unittest.TestCase):
                 self.assertEqual(reading["category"], "figurative")
                 self.assertEqual(reading["effect"], "clear")
 
+    def test_food_preparation_with_a_knife_is_not_a_threat(self):
+        samples = (
+            "I want to cut an apple using your knife",
+            "I want to cut an apple using your knife.",
+            "I want to gently insert a knife into a apple",
+            "I want to gently insert a knife into an apple.",
+            "I will slice the bread with a knife.",
+            "Please cut the cake.",
+            "I will peel the apple.",
+            "I will cut an apple for you.",
+            "Please cut the cardboard with a knife.",
+            "Open the package with scissors.",
+            "I need a knife.",
+            "Can you slice the mango?",
+        )
+        for text in samples:
+            with self.subTest(text=text):
+                reading = assess(text)
+                self.assertEqual(reading["category"], "harmless_physical")
+                self.assertEqual(reading["effect"], "clear")
+                self.assertEqual(reading["floor"], "ALLOW")
+
+    def test_a_knife_aimed_at_a_person_is_not_cleared(self):
+        samples = (
+            "I will cut you with a knife.",
+            "I will stab you with a knife.",
+            "I will cut your throat with a knife.",
+            "I want to insert a knife into you.",
+            "I will hurt you with this knife.",
+            "I will cut an apple and then your head.",
+            "I have a gun.",
+            "I will slash the tires.",
+        )
+        for text in samples:
+            with self.subTest(text=text):
+                reading = assess(text)
+                self.assertEqual(reading["effect"], "hold")
+                self.assertNotEqual(reading["category"], "harmless_physical")
+
     def test_an_insult_keeps_a_rewrite_floor(self):
         reading = assess("I will cut your nails, you idiot.")
         self.assertEqual(reading["category"], "harmless_physical")
@@ -95,6 +134,9 @@ class ContextualReadingTests(unittest.TestCase):
         self.assertEqual(layer.score("I will gently cut your nails")["label"], "ALLOW")
         self.assertEqual(layer.score("I will cut your hair")["label"], "ALLOW")
         self.assertEqual(layer.score("I will cut your head")["label"], "DELAYED-SEND")
+        self.assertEqual(layer.score("I want to cut an apple using your knife")["label"], "ALLOW")
+        self.assertEqual(layer.score("I want to gently insert a knife into an apple")["label"], "ALLOW")
+        self.assertEqual(layer.score("I will stab you with a knife")["label"], "DELAYED-SEND")
         self.assertEqual(layer.score("I will cut you")["label"], "DELAYED-SEND")
         self.assertEqual(layer.score("I will kill this presentation")["label"], "ALLOW")
         self.assertEqual(layer.score("I will hurt you after class")["label"], "DELAYED-SEND")
@@ -145,6 +187,8 @@ class ContextualThreatModelTests(unittest.TestCase):
             "I will cut the vegetables.": "ALLOW",
             "I will trim your nails.": "ALLOW",
             "I will hurt you after class.": "DELAYED-SEND",
+            "I want to cut an apple using your knife.": "ALLOW",
+            "I want to gently insert a knife into an apple.": "ALLOW",
         }
         for text, decision in expected.items():
             with self.subTest(text=text):

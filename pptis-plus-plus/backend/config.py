@@ -39,8 +39,6 @@ class Config:
     TESTING = False
 
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
-    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-jwt")
-    JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", "3600"))
 
     SQLALCHEMY_DATABASE_URI = _database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False

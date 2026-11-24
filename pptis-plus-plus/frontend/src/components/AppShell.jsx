@@ -7,11 +7,6 @@ const NAV = [
   { to: "/settings", label: "Settings", icon: "gear" },
 ];
 
-function initialOf(user) {
-  const source = user?.username || user?.email || "You";
-  return source.trim().charAt(0).toUpperCase() || "Y";
-}
-
 function Icon({ name }) {
   const common = "h-5 w-5";
   if (name === "chat") {
@@ -44,7 +39,7 @@ function Icon({ name }) {
   );
 }
 
-export function ShellProvider({ user, onLogout, children }) {
+export function ShellProvider({ children }) {
   return (
       <div className="flex h-screen flex-col overflow-hidden bg-[#e7edf8] px-3 py-5 text-slate-800 md:px-8 md:py-8">
         <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_20px_60px_rgba(76,70,140,0.12)]">
@@ -57,20 +52,13 @@ export function ShellProvider({ user, onLogout, children }) {
                 </svg>
               </span>
               <div>
-                <p className="text-lg font-bold leading-none text-slate-900">PPTIS++</p>
+                <p className="text-lg font-bold leading-none text-slate-900">Pause</p>
                 <p className="mt-1 text-xs text-slate-400">Think Before You Send</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onLogout}
-                title="Log out"
-                className="grid h-10 w-10 place-items-center rounded-full bg-[#5b4dff] text-sm font-semibold text-white"
-              >
-                {initialOf(user)}
-              </button>
-            </div>
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-[#5b4dff] text-sm font-semibold text-white">
+              P
+            </span>
           </header>
           <div className="flex min-h-0 flex-1">
             <aside className="hidden w-56 shrink-0 overflow-y-auto border-r border-slate-100 p-4 md:block">

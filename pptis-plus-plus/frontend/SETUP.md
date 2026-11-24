@@ -1,4 +1,4 @@
-# PPTIS++ frontend setup
+# Pause frontend setup
 
 The UI is a Vite + React 18 app with Tailwind CSS, React Router, Axios, and Recharts.
 
@@ -52,7 +52,7 @@ VITE_API_URL=http://localhost:5000
 
 In production set this to the public API origin, for example `https://api.example.com`. CORS on the backend must allow the frontend origin (`CORS_ORIGINS`).
 
-JWT is stored in `localStorage` as `pptis_token`. A 401 response clears the token.
+The chat opens directly. There is no login token.
 
 ## Component documentation
 
